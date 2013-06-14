@@ -1,0 +1,19 @@
+{-# LANGUAGE OverloadedStrings #-}
+module Config where
+
+import Network.OAuth.OAuth2 as OAuth2
+
+import Github
+
+githubKeys :: OAuth2.OAuth2
+githubKeys =
+  OAuth2.OAuth2
+    "xxxxxxxxxxxxxxxxxxxx"
+    "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    "https://github.com/login/oauth/authorize"
+    "https://github.com/login/oauth/access_token"
+    Nothing
+    Nothing
+
+authorized :: GithubUser -> Bool
+authorized = const True

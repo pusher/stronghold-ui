@@ -1,0 +1,10 @@
+name:                stronghold-ui
+version:             0.1
+build-type:          Simple
+cabal-version:       >=1.8
+
+executable stronghold-ui
+  main-is:             strongholdui.hs
+  build-depends:       base ==4.6.*, blaze-html, snap, snap-core, lens, text,
+                       bytestring, aeson, HTTP, network, hoauth2, time,
+                       unordered-containers
