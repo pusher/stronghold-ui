@@ -2,9 +2,17 @@
 module Database.Stronghold (
   Path,
   textToPath,
+  pathToText,
+  pathToList,
   listToPath,
+  viewl,
+  singletonPath,
   Client,
   Version,
+  bsToVersion,
+  textToVersion,
+  versionToText,
+  versionToBS,
   newClient,
   headRef,
   at,
@@ -21,14 +29,16 @@ import Data.Maybe (fromJust)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
+import Data.Aeson (fromJSON, toJSON)
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
-import Data.Text.Encoding (decodeUtf8)
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
 import qualified Data.HashMap.Strict as HashMap
 import Data.Time.Clock (UTCTime)
+import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (<*>))
 import Control.Monad (forM)
 
 import qualified Network.HTTP as HTTP
@@ -36,7 +46,13 @@ import Network.URI (URI, relativeTo, parseRelativeReference, parseURI)
 
 type JSON = Aeson.Value
 
-newtype Path = Path [Text]
+utcFromInteger :: Integer -> UTCTime
+utcFromInteger = posixSecondsToUTCTime . fromIntegral
+
+newtype Path = Path [Text] deriving Eq
+
+instance Show Path where
+  show path = Text.unpack $ Text.concat ["Path ", pathToText path]
 
 textToPath :: Text -> Maybe Path
 textToPath t =
@@ -55,6 +71,16 @@ listToPath = Path
 pathToText :: Path -> Text
 pathToText (Path p) = Text.concat (concatMap (\x -> ["/", x]) p)
 
+pathToList :: Path -> [Text]
+pathToList (Path p) = p
+
+viewl :: Path -> Maybe (Text, Path)
+viewl (Path []) = Nothing
+viewl (Path (x:xs)) = Just (x, Path xs)
+
+singletonPath :: Text -> Path
+singletonPath = Path . return
+
 instance Monoid Path where
   mempty = Path []
   mappend (Path x) (Path y) = Path (x ++ y)
@@ -64,130 +90,149 @@ newtype Version = Version Text
 data MetaInfo = MetaInfo UTCTime Text Text -- timestamp, comment, author
 data Change = Change Path JSON JSON
 
+-- not sure this is a good idea
+textToVersion :: Text -> Version
+textToVersion = Version
+
+bsToVersion :: B.ByteString -> Version
+bsToVersion = textToVersion . decodeUtf8
+
+versionToText :: Version -> Text
+versionToText (Version v) = v
+
+versionToBS :: Version -> B.ByteString
+versionToBS = encodeUtf8 . versionToText
+
 instance Aeson.FromJSON Change where
   parseJSON = undefined
 
-query :: Client -> URI -> IO BL.ByteString
+query :: HTTP.HStream x => Client -> URI -> IO x
 query (Client baseURI) path = do
   let uri = path `relativeTo` baseURI
   rsp <- HTTP.simpleHTTP (HTTP.mkRequest HTTP.GET uri)
   code <- HTTP.getResponseCode rsp
   case code of
     (2, 0, 0) -> HTTP.getResponseBody rsp
-    _ -> fail "bad status"
+    code -> fail ("bad status: " ++ show code)
 
-queryByteString :: Client -> URI -> IO B.ByteString
-queryByteString client path = (B.concat . BL.toChunks) <$> query client path
+postJSON :: Client -> URI -> JSON -> IO (Either Text B.ByteString)
+postJSON (Client baseURI) path body = do
+  let uri = path `relativeTo` baseURI
+  let req = HTTP.mkRequest HTTP.POST uri :: HTTP.Request B.ByteString
+  let body' = (B.concat . BL.toChunks . Aeson.encode) body
+  let req' = setBody body' req
+  rsp <- HTTP.simpleHTTP req'
+  code <- HTTP.getResponseCode rsp
+  body <- HTTP.getResponseBody rsp
+  case code of
+    (2, 0, 0) ->
+      return (Right body)
+    code ->
+      return $ Left $ Text.concat ["http post failed: ", Text.pack $ show code, " ", decodeUtf8 body]
+ where
+  setBody :: B.ByteString -> HTTP.Request B.ByteString -> HTTP.Request B.ByteString
+  setBody body req =
+    HTTP.replaceHeader HTTP.HdrContentType "application/json" $
+    HTTP.replaceHeader HTTP.HdrContentLength (show $ B.length body) $
+    req {HTTP.rqBody = body}
 
 queryJSON :: Aeson.FromJSON a => Client -> URI -> IO a
 queryJSON client path =
   fmap Aeson.decode (query client path) >>= maybe (fail "bad json") return
 
-plah :: Text -> [(Text, Text)] -> URI
-plah path qs =
+textToURI :: Text -> URI
+textToURI = fromJust . parseRelativeReference . Text.unpack
+
+constructURI :: Text -> [(Text, Text)] -> URI
+constructURI path qs =
   let qs' = concatMap (\(k, v) -> [k, "=", v]) qs
       qs'' = case qs' of
               [] -> []
               _ -> ("?" : qs') in
-    (plah1 . (path :)) qs''
-
-plah1 :: [Text] -> URI
-plah1 = fromJust . parseRelativeReference . Text.unpack . Text.concat
-
-plah6 :: Maybe a -> Aeson.Result a
-plah6 Nothing = Aeson.Error ""
-plah6 (Just x) = Aeson.Success x
-
-plah2 :: JSON -> Aeson.Result [(Version, MetaInfo)]
-plah2 dat = do
-  dat' <- Aeson.fromJSON dat :: Aeson.Result [HashMap.HashMap Text JSON]
-  forM dat' (\x -> do
-    version <- plah6 $ HashMap.lookup "version" x
-    version' <- Version <$> Aeson.fromJSON version
-    comment <- plah6 $ HashMap.lookup "comment" x
-    comment' <- Aeson.fromJSON comment
-    author <- plah6 $ HashMap.lookup "author" x
-    author' <- Aeson.fromJSON author
-    ts <- plah6 $ HashMap.lookup "timestamp" x
-    ts' <- Aeson.fromJSON ts
-    return (version', MetaInfo ts' comment' author'))
-
-plah3 :: JSON -> Aeson.Result (Version, JSON)
-plah3 dat = do
-  dat' <- Aeson.fromJSON dat :: Aeson.Result (HashMap.HashMap Text JSON)
-  version <- plah6 $ HashMap.lookup "version" dat'
-  version' <- Version <$> Aeson.fromJSON version
-  dat'' <- plah6 $ HashMap.lookup "data" dat'
-  return (version', dat'')
-
-plah4 :: JSON -> Aeson.Result [Path]
-plah4 dat = do
-  dat' <- Aeson.fromJSON dat :: Aeson.Result [Text]
-  mapM (plah6 . textToPath) dat'
-
-plah5 :: JSON -> Aeson.Result (MetaInfo, [Change])
-plah5 dat = do
-  dat' <- Aeson.fromJSON dat :: Aeson.Result (HashMap.HashMap Text JSON)
-  comment <- plah6 $ HashMap.lookup "comment" dat'
-  comment' <- Aeson.fromJSON comment
-  author <- plah6 $ HashMap.lookup "author" dat'
-  author' <- Aeson.fromJSON author
-  ts <- plah6 $ HashMap.lookup "timestamp" dat'
-  ts' <- Aeson.fromJSON ts
-  changes <- plah6 $ HashMap.lookup "changes" dat'
-  changes' <- Aeson.fromJSON changes
-  return (MetaInfo ts' comment' author', changes')
+    (textToURI . Text.concat . (path :)) qs''
 
 resultToM :: Monad m => Aeson.Result a -> m a
 resultToM (Aeson.Success x) = return x
 resultToM _ = fail "incorrect json structure"
 
-newClient :: String -> IO (Maybe Client)
+newClient :: String -> IO Client
 newClient =
-  return . fmap Client . parseURI
+  fmap Client . maybe (fail "couldn't parse url") return . parseURI
 
 headRef :: Client -> IO Version
-headRef client = (Version . decodeUtf8) <$> queryByteString client (plah1 ["/head"])
+headRef client = (Version . decodeUtf8) <$> query client ((textToURI . Text.concat) ["/head"])
 
 at :: Client -> UTCTime -> IO Version
 at client ts = do
-  let uri = plah "/versions" [("at", Text.pack (show 0))]
-  (Version . decodeUtf8) <$> queryByteString client uri
+  let uri = constructURI "/versions" [("at", Text.pack (show 0))]
+  (Version . decodeUtf8) <$> query client uri
+
+(.>) :: Aeson.FromJSON a => Text -> JSON -> Maybe a
+key <.> (Aeson.Object obj) = HashMap.lookup key obj
+_ .> _ = Nothing
 
 before :: Client -> Version -> Maybe Int -> IO [(Version, MetaInfo)]
 before client (Version version) limit = do
   let qs = [("last", version)] ++ maybe [] (\n -> [("size", Text.pack $ show n)]) limit
-  let uri = plah "/versions" qs
+  let uri = constructURI "/versions" qs
   result <- queryJSON client uri
-  resultToM (plah2 result)
+  maybe (fail "incorrect json structure") return (structureChanges result)
+ where
+  structureChanges :: JSON -> Maybe [(Version, MetaInfo)]
+  structureChanges dat = do
+    dat' <- resultToM $ fromJSON dat
+    forM dat' (\x ->
+      (,) <$>
+        (Version <$> ("version" .> x)) <*>
+        (MetaInfo <$>
+          (utcFromInteger <$> ("timestamp" .> x)) <*>
+          ("comment" .> x) <*>
+          ("author" .> x)))
 
 peculiar :: Client -> Version -> Path -> IO JSON
 peculiar client (Version version) path = do
-  let uri = plah1 ["/", version, "/tree/peculiar", pathToText path]
+  let uri = (textToURI . Text.concat) ["/", version, "/tree/peculiar", pathToText path]
   queryJSON client uri
 
 materialized :: Client -> Version -> Path -> IO JSON
 materialized client (Version version) path = do
-  let uri = plah1 ["/", version, "/tree/materialized", pathToText path]
+  let uri = (textToURI . Text.concat) ["/", version, "/tree/materialized", pathToText path]
   queryJSON client uri
 
 nextMaterialized :: Client -> Version -> Path -> IO (Version, JSON)
 nextMaterialized client (Version version) path = do
-  let uri = plah1 ["/", version, "/next/tree/materialized", pathToText path]
+  let uri = (textToURI . Text.concat) ["/", version, "/next/tree/materialized", pathToText path]
   result <- queryJSON client uri
-  resultToM (plah3 result)
+  let result' = (,) <$> (Version <$> ("version" .> result)) <*> ("data" .> result)
+  maybe (fail "incorrect json structure") return result'
 
 paths :: Client -> Version -> IO [Path]
 paths client (Version version) = do
-  let uri = plah1 ["/", version, "/tree/paths"]
+  let uri = (textToURI . Text.concat) ["/", version, "/tree/paths"]
   result <- queryJSON client uri
-  resultToM (plah4 result)
+  maybe (fail "incorrect json structure") return (structurePaths result)
+ where
+  structurePaths :: JSON -> Maybe [Path]
+  structurePaths dat = (resultToM . fromJSON) dat >>= mapM textToPath
 
 info :: Client -> Version -> IO (MetaInfo, [Change])
 info client (Version version) = do
-  let uri = plah1 ["/", version, "/change"]
+  let uri = (textToURI . Text.concat) ["/", version, "/change"]
   result <- queryJSON client uri
-  resultToM (plah5 result)
+  maybe (fail "incorrect json structure") return (structureChange result)
+ where
+  structureChange :: JSON -> Maybe (MetaInfo, [Change])
+  structureChange dat =
+    (,) <$>
+      (MetaInfo <$>
+        (utcFromInteger <$> ("timestamp" .> dat)) <*>
+        ("comment" .> dat) <*>
+        ("author" .> dat)) <*>
+      ("changes" .> dat)
 
-updatePath :: Client -> Version -> Path -> JSON -> IO (Maybe Version)
-updatePath client version path json = undefined
+updatePath :: Client -> Version -> Path -> JSON -> Text -> Text -> IO (Either Text Version)
+updatePath client (Version version) path json author comment = do
+  let uri = (textToURI . Text.concat) ["/", version, "/update", pathToText path]
+  let dat = Aeson.object [("author", toJSON author), ("comment", toJSON comment), ("data", json)]
+  result <- postJSON client uri dat
+  return (fmap (Version . decodeUtf8) result)

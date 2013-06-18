@@ -17,3 +17,6 @@ githubKeys =
 
 authorized :: GithubUser -> Bool
 authorized = const True
+
+strongholdURL :: String
+strongholdURL = "http://localhost:4050/"
