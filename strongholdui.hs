@@ -216,8 +216,12 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
     path <- S.listToPath <$> getPath
     client <- gets _stronghold
     peculiar <- liftIO $ S.peculiar client version' path
-    materialized <- liftIO $ S.materialized client (S.bsToVersion version) path
-    writeLazyText $ renderHtml $ nodeTemplate version' path peculiar materialized
+    materializedParent <-
+      maybe
+        (return (Aeson.object []))
+        (liftIO . S.materialized client version')
+        (S.parent path)
+    writeLazyText $ renderHtml $ nodeTemplate version' path peculiar materializedParent
 
   updateNode :: Handler StrongholdApp StrongholdApp ()
   updateNode = Snap.method POST $ forceLogin $ do

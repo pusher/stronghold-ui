@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Database.Stronghold (
   Path,
+  parent,
   textToPath,
   pathToText,
   pathToList,
@@ -53,6 +54,10 @@ newtype Path = Path [Text] deriving Eq
 
 instance Show Path where
   show path = Text.unpack $ Text.concat ["Path ", pathToText path]
+
+parent :: Path -> Maybe Path
+parent (Path []) = Nothing
+parent (Path xs) = (Just . Path . reverse . drop 1 . reverse) xs
 
 textToPath :: Text -> Maybe Path
 textToPath t =
