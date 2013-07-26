@@ -14,8 +14,10 @@ import Data.Tree
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.List (foldl')
+import Data.Time.Clock
 
 import Control.Applicative (empty)
+import Control.Lens (set)
 import Control.Lens.TH
 import Control.Monad (mzero)
 
@@ -25,8 +27,7 @@ import Snap
 import Snap.Util.FileServe
 
 import Text.Blaze.Html.Renderer.Text
-import Text.Blaze.Html5
-import Text.Blaze.Html5.Attributes
+import Text.Blaze.Html5 ((!))
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
 
@@ -40,97 +41,161 @@ import Config (githubKeys, authorized, strongholdURL)
 
 data StrongholdApp = StrongholdApp {
   _sess :: Snaplet SessionManager,
-  _stronghold :: S.Client
+  _stronghold :: S.Client,
+  _storedHead :: Maybe S.Version
 }
 makeLenses ''StrongholdApp -- This is a little bit magic.
 
 navbar :: H.Html
 navbar =
-  H.div ! class_ "navbar navbar-inverse navbar-fixed-top" $
-    H.div ! class_ "navbar-inner" $
-      H.div ! class_ "container" $ do
-        button !
-          type_ "button" !
-          class_ "btn btn-navbar" !
-          dataAttribute "toggle" "collapse" !
-          dataAttribute "target" ".nav-collapse" $ do
-            H.span ! class_ "icon-bar" $ mempty
-            H.span ! class_ "icon-bar" $ mempty
-            H.span ! class_ "icon-bar" $ mempty
-        a ! class_ "brand" ! href "#" $ "Stronghold"
-        H.div ! class_ "nav-collapse collapse" $
-          ul ! class_ "nav" $ do
-            li $ a ! href "/" $ "Head"
+  H.div ! A.class_ "navbar navbar-inverse navbar-fixed-top" $
+    H.div ! A.class_ "navbar-inner" $
+      H.div ! A.class_ "container" $ do
+        H.button !
+          A.type_ "H.button" !
+          A.class_ "btn btn-navbar" !
+          H.dataAttribute "toggle" "collapse" !
+          H.dataAttribute "target" ".nav-collapse" $ do
+            H.span ! A.class_ "icon-bar" $ mempty
+            H.span ! A.class_ "icon-bar" $ mempty
+            H.span ! A.class_ "icon-bar" $ mempty
+        H.a ! A.class_ "brand" ! A.href "#" $ "Stronghold"
+        H.div ! A.class_ "nav-collapse collapse" $
+          H.ul ! A.class_ "nav" $ do
+            H.li $ H.a ! A.href "/" $ "Head"
 
 rootTemplate :: H.Html -> H.Html -> H.Html
-rootTemplate headContent mainContent = docTypeHtml $ do
+rootTemplate headContent mainContent = H.docTypeHtml $ do
   H.head $ do
     H.title "Stronghold"
-    H.link ! rel "stylesheet" ! type_ "text/css" ! href "/assets/css/bootstrap.min.css"
-    H.script ! src "http://code.jquery.com/jquery.js" $ return ()
-    H.script ! src "/assets/js/bootstrap.min.js" $ return ()
+    H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/bootstrap.min.css"
+    H.script ! A.src "http://code.jquery.com/jquery.js" $ return ()
+    H.script ! A.src "/assets/js/bootstrap.min.js" $ return ()
     H.style "body { padding-top: 60px; }" -- Don't let the main content overlap the top bar
     headContent
   H.body $ do
     navbar
-    H.div ! class_ "container" $ mainContent
+    H.div ! A.class_ "container" $ mainContent
 
 nodeTemplate :: S.Version -> S.Path -> Aeson.Value -> Aeson.Value -> H.Html
 nodeTemplate version path peculiar materialized =
   rootTemplate
     (do
-      H.script ! src "/assets/jsoneditor/jsoneditor-min.js" $ return ()
-      H.script ! src "/assets/js/node.js" $ return ()
-      H.link ! rel "stylesheet" ! type_ "text/css" ! href "/assets/jsoneditor/jsoneditor-min.css")
-    (H.div ! class_ "row" $
-      H.div ! class_ "span8" $ do
-        H.div ! class_ "page-header" $ H.h4 $ toMarkup $ S.pathToText path
+      H.script ! A.src "/assets/jsoneditor/jsoneditor-min.js" $ return ()
+      H.script ! A.src "/assets/js/node.js" $ return ()
+      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/jsoneditor/jsoneditor-min.css")
+    (H.div ! A.class_ "row" $
+      H.div ! A.class_ "span8" $ do
+        H.div ! A.class_ "page-header" $ H.h4 $ H.toMarkup $ S.pathToText path
         H.p $
-          H.div ! A.id "mode" ! A.class_ "btn-group" ! H.dataAttribute "toggle" "buttons-radio" $ do
+          H.div ! A.id "mode" ! A.class_ "btn-group" ! H.dataAttribute "toggle" "H.buttons-radio" $ do
             H.button ! A.class_ "btn btn-primary active" ! A.value "0" $ "Peculiar"
             H.button ! A.class_ "btn btn-primary" ! A.value "1" $ "Materialized"
         H.div
           ! A.id "peculiar-editor"
-          ! dataAttribute "json" (jsonToAttr peculiar)
+          ! H.dataAttribute "json" (jsonToAttr peculiar)
             $ return ()
         H.div
           ! A.id "materialized-view"
-          ! dataAttribute "json" (jsonToAttr materialized)
+          ! H.dataAttribute "json" (jsonToAttr materialized)
           ! A.style "display: none"
             $ return ()
         H.br
-        let formAction = toValue $ Text.concat ["/", S.versionToText version, "/update", S.pathToText path]
+        let formAction = H.toValue $ Text.concat ["/", S.versionToText version, "/update", S.pathToText path]
         H.form ! A.id "update-form" ! A.method "POST" ! A.action formAction $
           H.fieldset $ do
-            H.input ! A.id "json-field" ! A.type_ "hidden" ! name "json"
-            H.textarea ! A.class_ "input-block-level" ! name "comment" ! placeholder "Comment" $ return ()
+            H.input ! A.id "json-field" ! A.type_ "hidden" ! A.name "json"
+            H.textarea ! A.class_ "input-block-level" ! A.name "comment" ! A.placeholder "Comment" $ return ()
             H.input ! A.type_ "submit" ! A.value "Update" ! A.class_ "btn")
  where
-  jsonToAttr = toValue . decodeUtf8 . B.concat . BL.toChunks . Aeson.encode
+  jsonToAttr = H.toValue . decodeUtf8 . B.concat . BL.toChunks . Aeson.encode
 
-versionTemplate :: H.Html -> H.Html
-versionTemplate tree =
+humanizeTime :: UTCTime -> UTCTime -> Text
+humanizeTime now ts =
+  let diff = now `diffUTCTime` ts
+      minute = 60
+      hour = 60*minute
+      day = 24*hour
+      week = 7*day
+      month = 30*day
+      year = 365*day in
+    if diff < 5 then
+      "just now"
+    else if diff < minute then
+      Text.concat [Text.pack $ show $ round diff, " seconds ago"]
+    else if diff < hour then
+      case round $ diff/minute of
+        1 -> "a minute ago"
+        n -> Text.concat [Text.pack $ show n, " minutes ago"]
+    else if diff < day then
+      case round $ diff/hour of
+        1 -> "an hour ago"
+        n -> Text.concat [Text.pack $ show n, " hours ago"]
+    else if diff < week then
+      case round $ diff/day of
+        1 -> "a day ago"
+        n -> Text.concat [Text.pack $ show n, " days ago"]
+    else if diff < month then
+      case round $ diff/week of
+        1 -> "a week ago"
+        n -> Text.concat [Text.pack $ show n, " weeks ago"]
+    else if diff < year then
+      case round $ diff/month of
+        1 -> "a month ago"
+        n -> Text.concat [Text.pack $ show n, " months ago"]
+    else
+      case round $ diff/year of
+        1 -> "a year ago"
+        n -> Text.concat [Text.pack $ show n, " years ago"]
+
+makeTimeHTML :: UTCTime -> UTCTime -> H.Html
+makeTimeHTML now ts =
+  let ts' = (H.toValue . Text.pack . show) ts in
+    H.time ! A.datetime ts' ! A.title ts' $ H.toMarkup (humanizeTime now ts)
+
+type VersionsInfo = [(S.Version, S.MetaInfo, [S.Path])]
+type UpdateInfo = (S.MetaInfo, [S.Change])
+
+versionTemplate :: UTCTime -> S.Version -> H.Html -> VersionsInfo -> Maybe UpdateInfo -> VersionsInfo -> H.Html
+versionTemplate now version tree before current after =
   rootTemplate
     (do
-      H.script ! src "/assets/js/version.js" $ return ()
-      H.link ! rel "stylesheet" ! type_ "text/css" ! href "/assets/css/hierarchy.css")
-    (H.div ! class_ "row" $ do
-      H.div ! class_ "span6" $ do
-        h3 "Updates"
-      H.div ! class_ "span6" $ do
+      H.script ! A.src "/assets/js/version.js" $ return ()
+      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/hierarchy.css")
+    (H.div ! A.class_ "row" $ do
+      H.div ! A.class_ "span6" $ do
+        H.h3 "Updates"
+        forM_ (reverse after) renderShortVersion
+        H.div ! A.id "newer" $ "newer ⇀"
+        H.em "this update"
+        H.div ! A.id "older-wrapper" $ H.div ! A.id "older" $ "↼ older"
+        forM_ before renderShortVersion
+      H.div ! A.class_ "span6" $ do
         H.div $ do
-          h3 "Hierarchy At"
-          H.form ! A.action "/at" $ do
-            H.input ! type_ "date" ! name "date"
-            H.input ! type_ "time" ! name "time"
-            button ! type_ "submit" $ "Go"
-        H.div $ do
-          h3 "Hierarchy"
+          H.h3 "Hierarchy"
           H.div ! A.class_ "tree" $ tree
-        H.div $ do
           H.form ! A.id "navigate-hierarchy" ! A.class_ "form-inline" $ do
-            H.input ! type_ "text" ! placeholder "Enter Path" ! name "path"
-            button ! type_ "submit" ! A.class_ "btn" $ "Go")
+            H.input ! A.type_ "text" ! A.placeholder "Enter Path" ! A.name "path"
+            H.button ! A.type_ "submit" ! A.class_ "btn" $ "Go"
+        maybe (return ()) (\(S.MetaInfo ts comment author, changes) ->
+          H.div $ do
+            H.h3 "Update Information"
+            H.div $ do
+              H.toMarkup author
+              " updated "
+              "/foo/bar"
+              " "
+              makeTimeHTML now ts
+              " "
+              H.toMarkup comment) current)
+ where
+  renderShortVersion :: (S.Version, S.MetaInfo, [S.Path]) -> H.Html
+  renderShortVersion (version, S.MetaInfo ts comment author, _) =
+    H.div $ do
+      makeTimeHTML now ts
+      H.a ! (A.href $ H.toValue $ Text.concat ["/", S.versionToText version, "/info"]) $
+        H.h5 $ H.toMarkup $ Text.concat [author, " added an update"]
+      H.toMarkup comment
 
 constructTree :: S.Path -> [S.Path] -> Tree S.Path
 constructTree root =
@@ -145,7 +210,7 @@ constructTree root =
     catMaybes .
     fmap (fmap (\(x, xs) -> HashMap.insert x [xs] HashMap.empty) . S.viewl)
 
-renderTree :: S.Version -> Tree S.Path -> Html
+renderTree :: S.Version -> Tree S.Path -> H.Html
 renderTree version tree =
   H.ul $ renderTreeLi version tree
  where
@@ -153,10 +218,10 @@ renderTree version tree =
   renderTreeLi version (Node x children) = do
     H.li $ do
       let x' = S.pathToText x
-      H.a ! href (toValue (Text.concat ["/", S.versionToText version, "/node", x'])) $
+      H.a ! A.href (H.toValue (Text.concat ["/", S.versionToText version, "/node", x'])) $
         case S.pathToList x of
           [] -> "root"
-          l -> toMarkup $ last l
+          l -> H.toMarkup $ last l
       H.ul $ mapM_ (renderTreeLi version) children
 
 appInit :: SnapletInit StrongholdApp StrongholdApp
@@ -175,12 +240,22 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
     ("/assets", serveDirectory "./assets")
    ]
   client <- liftIO $ S.newClient strongholdURL
-  return $ StrongholdApp session client
+  return $ StrongholdApp session client Nothing
  where
+  getHead :: Handler StrongholdApp StrongholdApp S.Version
+  getHead = do
+    head <- gets _storedHead
+    case head of
+      Just head' -> return head'
+      Nothing -> do
+        client <- gets _stronghold
+        version <- liftIO $ S.headRef client
+        modify (set storedHead (Just version))
+        return version
+
   home :: Handler StrongholdApp StrongholdApp ()
   home = ifTop $ Snap.method GET $ forceLogin $ do
-    client <- gets _stronghold
-    version <- liftIO $ S.headRef client
+    version <- getHead
     redirect $ B.concat ["/", S.versionToBS version, "/info"]
 
   at :: Handler StrongholdApp StrongholdApp ()
@@ -192,11 +267,18 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
   -- The page for a particular version
   info :: Handler StrongholdApp StrongholdApp ()
   info = ifTop $ Snap.method GET $ forceLogin $ do
+    modifyResponse $ setContentType "text/html; charset=utf-8"
     Just version <- fmap S.bsToVersion <$> getParam "version"
     client <- gets _stronghold
+    storedHead <- getHead
+    b <- reverse <$> (liftIO $ S.before client version (Just 10))
+    a <- liftIO $ S.after client version storedHead 10
     paths <- liftIO $ S.paths client version
     let tree = constructTree mempty paths
-    writeLazyText $ renderHtml $ versionTemplate $ renderTree version tree
+    now <- liftIO $ getCurrentTime
+    info <- liftIO $ S.fetchVersionInfo client version
+    writeLazyText $ renderHtml $
+      versionTemplate now version (renderTree version tree) (drop 1 b) info a
 
   getPath :: Handler StrongholdApp StrongholdApp [Text]
   getPath = do
@@ -211,6 +293,7 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
   -- The page for a particular node
   node :: Handler StrongholdApp StrongholdApp ()
   node = Snap.method GET $ forceLogin $ do
+    modifyResponse $ setContentType "text/html; charset=utf-8"
     Just version <- getParam "version"
     let version' = S.bsToVersion version
     path <- S.listToPath <$> getPath
@@ -270,10 +353,10 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
             user <- liftIO $ userInfo (githubKeys {OAuth2.oauthAccessToken = Just token'})
             case user of
               Nothing -> writeText "not authorized"
-              Just user'@(GithubUser _ name email) ->
+              Just user'@(GithubUser _ name _) ->
                 if authorized user' then do
                   with sess $ do
-                    setInSession "author" (Text.concat [name, " <", email, ">"])
+                    setInSession "author" name
                     commitSession
                   redirect "/"
                 else

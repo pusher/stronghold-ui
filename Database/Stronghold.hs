@@ -10,6 +10,8 @@ module Database.Stronghold (
   singletonPath,
   Client,
   Version,
+  MetaInfo(MetaInfo),
+  Change(Change),
   bsToVersion,
   textToVersion,
   versionToText,
@@ -18,19 +20,21 @@ module Database.Stronghold (
   headRef,
   at,
   before,
+  after,
   materialized,
   peculiar,
   nextMaterialized,
-  info,
+  fetchVersionInfo,
   paths,
   updatePath
 ) where
 
+import Data.List (intercalate)
 import Data.Maybe (fromJust)
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
-import Data.Aeson (fromJSON, toJSON)
+import Data.Aeson (fromJSON, toJSON, (.:))
 import qualified Data.Aeson as Aeson
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
@@ -40,7 +44,7 @@ import Data.Time.Clock (UTCTime)
 import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
 
 import Control.Applicative ((<$>), (<*>))
-import Control.Monad (forM)
+import Control.Monad (forM, mzero)
 
 import qualified Network.HTTP as HTTP
 import Network.URI (URI, relativeTo, parseRelativeReference, parseURI)
@@ -91,8 +95,8 @@ instance Monoid Path where
   mappend (Path x) (Path y) = Path (x ++ y)
 
 data Client = Client URI
-newtype Version = Version Text
-data MetaInfo = MetaInfo UTCTime Text Text -- timestamp, comment, author
+newtype Version = Version Text deriving (Eq, Show)
+data MetaInfo = MetaInfo UTCTime Text Text deriving Show-- timestamp, comment, author
 data Change = Change Path JSON JSON
 
 -- not sure this is a good idea
@@ -109,7 +113,12 @@ versionToBS :: Version -> B.ByteString
 versionToBS = encodeUtf8 . versionToText
 
 instance Aeson.FromJSON Change where
-  parseJSON = undefined
+  parseJSON (Aeson.Object x) =
+    Change <$>
+      ((fromJust . textToPath) <$> (x .: "path")) <*>
+      (x .: "old") <*>
+      (x .: "new")
+  parseJSON _ = mzero
 
 query :: HTTP.HStream x => Client -> URI -> IO x
 query (Client baseURI) path = do
@@ -150,7 +159,7 @@ textToURI = fromJust . parseRelativeReference . Text.unpack
 
 constructURI :: Text -> [(Text, Text)] -> URI
 constructURI path qs =
-  let qs' = concatMap (\(k, v) -> [k, "=", v]) qs
+  let qs' = intercalate ["&"] $ map (\(k, v) -> [k, "=", v]) qs
       qs'' = case qs' of
               [] -> []
               _ -> ("?" : qs') in
@@ -173,26 +182,34 @@ at client ts = do
   (Version . decodeUtf8) <$> query client uri
 
 (.>) :: Aeson.FromJSON a => Text -> JSON -> Maybe a
-key <.> (Aeson.Object obj) = HashMap.lookup key obj
+key .> (Aeson.Object obj) = HashMap.lookup key obj >>= (resultToM . Aeson.fromJSON)
 _ .> _ = Nothing
 
-before :: Client -> Version -> Maybe Int -> IO [(Version, MetaInfo)]
-before client (Version version) limit = do
-  let qs = [("last", version)] ++ maybe [] (\n -> [("size", Text.pack $ show n)]) limit
+structureChanges :: JSON -> Maybe [(Version, MetaInfo, [Path])]
+structureChanges dat = do
+  dat' <- resultToM $ fromJSON dat
+  mapM (\x ->
+    (,,) <$>
+      (Version <$> ("revision" .> x)) <*>
+      (MetaInfo <$>
+        (utcFromInteger <$> ("timestamp" .> x)) <*>
+        ("comment" .> x) <*>
+        ("author" .> x)) <*>
+      (("paths" .> x) >>= (sequence . map textToPath))) dat'
+
+before :: Client -> Version -> Maybe Int -> IO [(Version, MetaInfo, [Path])]
+before client version limit = do
+  let qs = [("last", versionToText version)] ++ maybe [] (\n -> [("size", Text.pack $ show n)]) limit
   let uri = constructURI "/versions" qs
   result <- queryJSON client uri
   maybe (fail "incorrect json structure") return (structureChanges result)
- where
-  structureChanges :: JSON -> Maybe [(Version, MetaInfo)]
-  structureChanges dat = do
-    dat' <- resultToM $ fromJSON dat
-    forM dat' (\x ->
-      (,) <$>
-        (Version <$> ("version" .> x)) <*>
-        (MetaInfo <$>
-          (utcFromInteger <$> ("timestamp" .> x)) <*>
-          ("comment" .> x) <*>
-          ("author" .> x)))
+
+after :: Client -> Version -> Version -> Int -> IO [(Version, MetaInfo, [Path])]
+after client from to limit = do
+  let qs = [("first", versionToText from), ("limit", versionToText to), ("size", Text.pack $ show limit)]
+  let uri = constructURI "/versions" qs
+  result <- queryJSON client uri
+  maybe (fail "incorrect json structure") return (structureChanges result)
 
 peculiar :: Client -> Version -> Path -> IO JSON
 peculiar client (Version version) path = do
@@ -220,20 +237,25 @@ paths client (Version version) = do
   structurePaths :: JSON -> Maybe [Path]
   structurePaths dat = (resultToM . fromJSON) dat >>= mapM textToPath
 
-info :: Client -> Version -> IO (MetaInfo, [Change])
-info client (Version version) = do
+fetchVersionInfo :: Client -> Version -> IO (Maybe (MetaInfo, [Change]))
+fetchVersionInfo client (Version version) = do
   let uri = (textToURI . Text.concat) ["/", version, "/change"]
   result <- queryJSON client uri
   maybe (fail "incorrect json structure") return (structureChange result)
  where
-  structureChange :: JSON -> Maybe (MetaInfo, [Change])
+  structureChange :: JSON -> Maybe (Maybe (MetaInfo, [Change]))
   structureChange dat =
-    (,) <$>
-      (MetaInfo <$>
-        (utcFromInteger <$> ("timestamp" .> dat)) <*>
-        ("comment" .> dat) <*>
-        ("author" .> dat)) <*>
-      ("changes" .> dat)
+    case resultToM $ fromJSON dat of
+      Nothing -> Nothing
+      Just Nothing -> Just Nothing
+      Just (Just x) ->
+        Just $
+          (,) <$>
+            (MetaInfo <$>
+              (utcFromInteger <$> ("timestamp" .> x)) <*>
+              ("comment" .> x) <*>
+              ("author" .> x)) <*>
+            ("changes" .> x)
 
 updatePath :: Client -> Version -> Path -> JSON -> Text -> Text -> IO (Either Text Version)
 updatePath client (Version version) path json author comment = do
