@@ -13,7 +13,7 @@ import Data.Aeson ((.:))
 import Data.Tree
 import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
-import Data.List (foldl')
+import Data.List (foldl', intersperse)
 import Data.Time.Clock
 
 import Control.Applicative (empty)
@@ -189,12 +189,22 @@ versionTemplate now version tree before current after =
               " "
               H.toMarkup comment) current)
  where
+  renderPaths :: [S.Path] -> Text
+  renderPaths [] = ""
+  renderPaths [x] = S.pathToText x
+  renderPaths x =
+    let x' = map S.pathToText x
+        r = reverse x'
+        l = head r
+        o = reverse (tail r) in
+          Text.concat $ intersperse ", " o ++ [" and ", l]
+
   renderShortVersion :: (S.Version, S.MetaInfo, [S.Path]) -> H.Html
-  renderShortVersion (version, S.MetaInfo ts comment author, _) =
+  renderShortVersion (version, S.MetaInfo ts comment author, paths) =
     H.div $ do
       makeTimeHTML now ts
       H.a ! (A.href $ H.toValue $ Text.concat ["/", S.versionToText version, "/info"]) $
-        H.h5 $ H.toMarkup $ Text.concat [author, " added an update"]
+        H.h5 $ H.toMarkup $ Text.concat [author, " updated ", renderPaths paths]
       H.toMarkup comment
 
 constructTree :: S.Path -> [S.Path] -> Tree S.Path
