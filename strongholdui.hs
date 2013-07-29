@@ -154,10 +154,10 @@ makeTimeHTML now ts =
     H.time ! A.datetime ts' ! A.title ts' $ H.toMarkup (humanizeTime now ts)
 
 type VersionsInfo = [(S.Version, S.MetaInfo, [S.Path])]
-type UpdateInfo = (S.MetaInfo, [S.Change])
+type UpdateInfo = ((S.Version, S.MetaInfo, [S.Path]), [S.Change])
 
-versionTemplate :: UTCTime -> S.Version -> H.Html -> VersionsInfo -> Maybe UpdateInfo -> VersionsInfo -> H.Html
-versionTemplate now version tree before current after =
+versionTemplate :: UTCTime -> S.Version -> H.Html -> Maybe (VersionsInfo, UpdateInfo) -> VersionsInfo -> H.Html
+versionTemplate now version tree upto after =
   rootTemplate
     (do
       H.script ! A.src "/assets/js/version.js" $ return ()
@@ -167,9 +167,12 @@ versionTemplate now version tree before current after =
         H.h3 "Updates"
         forM_ (reverse after) renderShortVersion
         H.div ! A.id "newer" $ "newer ⇀"
-        H.em "this update"
-        H.div ! A.id "older-wrapper" $ H.div ! A.id "older" $ "↼ older"
-        forM_ before renderShortVersion
+        case upto of
+          Just (before, (current, _)) -> do
+            H.div ! A.class_ "" $ renderShortVersion current
+            H.div ! A.id "older-wrapper" $ H.div ! A.id "older" $ "↼ older"
+            forM_ before renderShortVersion
+          Nothing -> return ()
       H.div ! A.class_ "span6" $ do
         H.div $ do
           H.h3 "Hierarchy"
@@ -177,17 +180,18 @@ versionTemplate now version tree before current after =
           H.form ! A.id "navigate-hierarchy" ! A.class_ "form-inline" $ do
             H.input ! A.type_ "text" ! A.placeholder "Enter Path" ! A.name "path"
             H.button ! A.type_ "submit" ! A.class_ "btn" $ "Go"
-        maybe (return ()) (\(S.MetaInfo ts comment author, changes) ->
-          H.div $ do
-            H.h3 "Update Information"
+        case upto of
+          Nothing ->
+            H.div $ H.h3 "Sentinel Version"
+          Just (_, ((_, S.MetaInfo ts comment author, paths), changes)) -> 
             H.div $ do
-              H.toMarkup author
-              " updated "
-              "/foo/bar"
-              " "
-              makeTimeHTML now ts
-              " "
-              H.toMarkup comment) current)
+              H.h3 "Update Information"
+              H.div $ do
+                let paths = map (\(S.Change path _ _) -> path) changes
+                makeTimeHTML now ts
+                H.toMarkup author
+                H.toMarkup comment
+                H.toMarkup (renderPaths paths))
  where
   renderPaths :: [S.Path] -> Text
   renderPaths [] = ""
@@ -287,8 +291,12 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
     let tree = constructTree mempty paths
     now <- liftIO $ getCurrentTime
     info <- liftIO $ S.fetchVersionInfo client version
+    let upto =
+          flip fmap info (\(meta, changes) ->
+            let paths = map (\(S.Change path _ _) -> path) changes in
+              (drop 1 b, ((version, meta, paths), changes)))
     writeLazyText $ renderHtml $
-      versionTemplate now version (renderTree version tree) (drop 1 b) info a
+      versionTemplate now version (renderTree version tree) upto a
 
   getPath :: Handler StrongholdApp StrongholdApp [Text]
   getPath = do
