@@ -1,24 +1,32 @@
+#newer-wrapper {
+  position: relative;
+}
+
 #newer {
   display: table-cell;
-  position: relative;
+  position: absolute;
 
   left:-10px;
 
-  -webkit-transform: rotate(-90deg);
-  transform: rotate(-90deg);
+  -webkit-transform: rotate(-90deg) translate(20px, 0px);
+  transform: rotate(-90deg) translate(20px, 0px);
 
   -webkit-transform-origin: 0% 100%;
   transform-origin: 0% 100%;
 }
 
+#older-wrapper-wrapper {
+  position: relative;
+}
+
 #older-wrapper {
   display: table-cell;
-  position: relative;
+  position: absolute;
 
   left:-10px;
 
-  -webkit-transform: rotate(90deg);
-  transform: rotate(90deg);
+  -webkit-transform: rotate(90deg) translate(-20px, 0px);
+  transform: rotate(90deg) translate(-20px, 0px);
 
   -webkit-transform-origin: 0% 0%;
   transform-origin: 0% 0%;
@@ -28,6 +36,18 @@
   -webkit-transform: rotate(180deg);
   transform: rotate(180deg);
 }
+
+.short-change {
+  padding-top: 5px;
+  padding-bottom: 5px;
+  margin-bottom: 20px;
+}
+
+#current-change {
+  border-top: 1px dashed #808080;
+  border-bottom: 1px dashed #808080;
+}
+
 
 .tree ul {
   margin: 0;

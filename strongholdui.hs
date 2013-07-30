@@ -165,13 +165,18 @@ versionTemplate now version tree upto after =
     (H.div ! A.class_ "row" $ do
       H.div ! A.class_ "span6" $ do
         H.h3 "Updates"
-        forM_ (reverse after) renderShortVersion
-        H.div ! A.id "newer" $ "newer ⇀"
+        when (not (null after)) $ do
+          forM_ (reverse after) renderShortVersion
+          H.div ! A.id "newer-wrapper" $
+            H.div ! A.id "newer" $ "newer ⇀"
         case upto of
           Just (before, (current, _)) -> do
-            H.div ! A.class_ "" $ renderShortVersion current
-            H.div ! A.id "older-wrapper" $ H.div ! A.id "older" $ "↼ older"
-            forM_ before renderShortVersion
+            renderShortVersion current ! A.id "current-change"
+            when (not (null before)) $ do
+              H.div ! A.id "older-wrapper-wrapper" $
+                H.div ! A.id "older-wrapper" $
+                  H.div ! A.id "older" $ "↼ older"
+              forM_ before renderShortVersion
           Nothing -> return ()
       H.div ! A.class_ "span6" $ do
         H.div $ do
@@ -179,19 +184,7 @@ versionTemplate now version tree upto after =
           H.div ! A.class_ "tree" $ tree
           H.form ! A.id "navigate-hierarchy" ! A.class_ "form-inline" $ do
             H.input ! A.type_ "text" ! A.placeholder "Enter Path" ! A.name "path"
-            H.button ! A.type_ "submit" ! A.class_ "btn" $ "Go"
-        case upto of
-          Nothing ->
-            H.div $ H.h3 "Sentinel Version"
-          Just (_, ((_, S.MetaInfo ts comment author, paths), changes)) -> 
-            H.div $ do
-              H.h3 "Update Information"
-              H.div $ do
-                let paths = map (\(S.Change path _ _) -> path) changes
-                makeTimeHTML now ts
-                H.toMarkup author
-                H.toMarkup comment
-                H.toMarkup (renderPaths paths))
+            H.button ! A.type_ "submit" ! A.class_ "btn" $ "Go")
  where
   renderPaths :: [S.Path] -> Text
   renderPaths [] = ""
@@ -205,7 +198,7 @@ versionTemplate now version tree upto after =
 
   renderShortVersion :: (S.Version, S.MetaInfo, [S.Path]) -> H.Html
   renderShortVersion (version, S.MetaInfo ts comment author, paths) =
-    H.div $ do
+    H.div ! A.class_ "short-change" $ do
       makeTimeHTML now ts
       H.a ! (A.href $ H.toValue $ Text.concat ["/", S.versionToText version, "/info"]) $
         H.h5 $ H.toMarkup $ Text.concat [author, " updated ", renderPaths paths]
