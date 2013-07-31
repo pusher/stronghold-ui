@@ -7,4 +7,4 @@ executable stronghold-ui
   main-is:             strongholdui.hs
   build-depends:       base ==4.6.*, blaze-html, snap, snap-core, lens, text,
                        bytestring, aeson, HTTP, network, hoauth2, time,
-                       unordered-containers, containers
+                       unordered-containers, containers, configurator

@@ -15,6 +15,8 @@ import Data.HashMap.Strict (HashMap)
 import qualified Data.HashMap.Strict as HashMap
 import Data.List (foldl', intersperse)
 import Data.Time.Clock
+import Data.Configurator (load, require, Worth(Required))
+import Data.Configurator.Types (Configured, convert, Value(List))
 
 import Control.Applicative (empty)
 import Control.Lens (set)
@@ -37,7 +39,6 @@ import qualified Network.OAuth.OAuth2 as OAuth2
 import Network.OAuth.OAuth2.HttpClient (doJSONPostRequest)
 
 import Github
-import Config (githubKeys, authorized, strongholdURL)
 
 data StrongholdApp = StrongholdApp {
   _sess :: Snaplet SessionManager,
@@ -231,23 +232,24 @@ renderTree version tree =
           l -> H.toMarkup $ last l
       H.ul $ mapM_ (renderTreeLi version) children
 
-appInit :: SnapletInit StrongholdApp StrongholdApp
-appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
-  session <- nestSnaplet "" sess $
-    initCookieSessionManager "config/session_secret" "sess" Nothing
-  addRoutes [
-    ("/", home),
-    ("/at", at),
-    ("/login", login),
-    ("/auth/github/callback", githubCallback),
-    ("/logout", logout),
-    ("/:version/info", info),
-    ("/:version/node", node),
-    ("/:version/update", updateNode),
-    ("/assets", serveDirectory "./assets")
-   ]
-  client <- liftIO $ S.newClient strongholdURL
-  return $ StrongholdApp session client Nothing
+appInit :: String -> OAuth2.OAuth2 -> (GithubUser -> Bool) -> SnapletInit StrongholdApp StrongholdApp
+appInit strongholdURL githubKeys authorised =
+  makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
+    session <- nestSnaplet "" sess $
+      initCookieSessionManager "config/session_secret" "sess" Nothing
+    addRoutes [
+      ("/", home),
+      ("/at", at),
+      ("/login", login),
+      ("/auth/github/callback", githubCallback),
+      ("/logout", logout),
+      ("/:version/info", info),
+      ("/:version/node", node),
+      ("/:version/update", updateNode),
+      ("/assets", serveDirectory "./assets")
+     ]
+    client <- liftIO $ S.newClient strongholdURL
+    return $ StrongholdApp session client Nothing
  where
   getHead :: Handler StrongholdApp StrongholdApp S.Version
   getHead = do
@@ -363,15 +365,15 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
           Just (OAuth2.AccessToken token' _) -> do
             user <- liftIO $ userInfo (githubKeys {OAuth2.oauthAccessToken = Just token'})
             case user of
-              Nothing -> writeText "not authorized"
-              Just user'@(GithubUser _ name _) ->
-                if authorized user' then do
+              Nothing -> writeText "not authorised"
+              Just user'@(GithubUser _ name _ _) ->
+                if authorised user' then do
                   with sess $ do
                     setInSession "author" name
                     commitSession
                   redirect "/"
                 else
-                  writeText "not authorized"
+                  writeText "not authorised"
 
   logout :: Handler StrongholdApp StrongholdApp ()
   logout = Snap.method GET $ ifTop $ do
@@ -380,5 +382,30 @@ appInit = makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ 
       commitSession
     writeText "logged out"
 
+convertList :: Configured a => Value -> Maybe [a]
+convertList (List x) = sequence (map convert x)
+convertList _ = Nothing
+
+fetchConfig :: IO (String, OAuth2.OAuth2, GithubUser -> Bool)
+fetchConfig = do
+  config <- load [Required "config/stronghold.cfg"]
+  strongholdURL <- require config "stronghold-url"
+  clientID <- require config "github-client-id"
+  clientSecret <- require config "github-client-secret"
+  authorised <- convertList <$> require config "authorised-users"
+  authorised' <- maybe (error "expected a list of github usernames") return authorised
+  return  
+    (strongholdURL,
+     OAuth2.OAuth2
+      clientID
+      clientSecret
+      "https://github.com/login/oauth/authorize"
+      "https://github.com/login/oauth/access_token"
+      Nothing
+      Nothing,
+     flip elem authorised' . githubLogin)
+
 main :: IO ()
-main = serveSnaplet defaultConfig appInit
+main = do
+  (strongholdURL, githubKeys, authorised) <- fetchConfig
+  serveSnaplet defaultConfig (appInit strongholdURL githubKeys authorised)

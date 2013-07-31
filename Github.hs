@@ -11,12 +11,17 @@ import Control.Monad (mzero)
 import qualified Network.OAuth.OAuth2 as OAuth2
 import Network.OAuth.OAuth2.HttpClient (doJSONGetRequest)
 
-data GithubUser = GithubUser Integer Text Text deriving Show
+data GithubUser = GithubUser {
+  githubID :: Integer,
+  githubName :: Text,
+  githubEmail :: Text,
+  githubLogin :: Text
+} deriving Show
 
 instance Aeson.FromJSON GithubUser where
-    parseJSON (Aeson.Object o) =
-      GithubUser <$> o .: "id" <*> o .: "name" <*> o .: "email"
-    parseJSON _ = mzero
+  parseJSON (Aeson.Object o) =
+    GithubUser <$> o .: "id" <*> o .: "name" <*> o .: "email" <*> o .: "login"
+  parseJSON _ = mzero
 
 userInfo :: OAuth2.OAuth2 -> IO (Maybe GithubUser)
 userInfo oauth =
