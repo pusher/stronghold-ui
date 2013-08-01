@@ -6,5 +6,5 @@ cabal-version:       >=1.8
 executable stronghold-ui
   main-is:             strongholdui.hs
   build-depends:       base ==4.6.*, blaze-html, snap, snap-core, lens, text,
-                       bytestring, aeson, HTTP, network, hoauth2, time,
+                       bytestring, aeson, HTTP, network, hoauth2 ==0.3.0, time,
                        unordered-containers, containers, configurator
