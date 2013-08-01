@@ -53,7 +53,8 @@ data AppConfig = AppConfig {
   strongholdURL :: String,
   githubKeys :: OAuth2.OAuth2,
   authorised :: GithubUser -> Bool,
-  portNum :: Int
+  portNum :: Int,
+  sessionSecretPath :: FilePath
 }
 
 navbar :: H.Html
@@ -242,10 +243,10 @@ renderTree version tree =
       H.ul $ mapM_ (renderTreeLi version) children
 
 appInit :: AppConfig -> SnapletInit StrongholdApp StrongholdApp
-appInit (AppConfig strongholdURL githubKeys authorised _) =
+appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath) =
   makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
     session <- nestSnaplet "" sess $
-      initCookieSessionManager "config/session_secret" "sess" Nothing
+      initCookieSessionManager sessionSecretPath "sess" Nothing
     addRoutes [
       ("/", home),
       ("/at", at),
@@ -404,6 +405,7 @@ fetchConfig filename = do
   authorised <- convertList <$> require config "authorised-users"
   authorised' <- maybe (error "expected a list of github usernames") return authorised
   portNum <- require config "port"
+  sessionSecretPath <- require config "session-secret-path"
   return
     (AppConfig
       strongholdURL
@@ -415,7 +417,8 @@ fetchConfig filename = do
         Nothing
         Nothing)
       (flip elem authorised' . githubLogin)
-      portNum)
+      portNum
+      sessionSecretPath)
 
 main :: IO ()
 main = do
