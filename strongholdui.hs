@@ -23,6 +23,8 @@ import Control.Lens (set)
 import Control.Lens.TH
 import Control.Monad (mzero)
 
+import System.Environment (getArgs)
+
 import Snap.Snaplet.Session
 import Snap.Snaplet.Session.Backends.CookieSession
 import Snap
@@ -46,6 +48,13 @@ data StrongholdApp = StrongholdApp {
   _storedHead :: Maybe S.Version
 }
 makeLenses ''StrongholdApp -- This is a little bit magic.
+
+data AppConfig = AppConfig {
+  strongholdURL :: String,
+  githubKeys :: OAuth2.OAuth2,
+  authorised :: GithubUser -> Bool,
+  portNum :: Int
+}
 
 navbar :: H.Html
 navbar =
@@ -232,8 +241,8 @@ renderTree version tree =
           l -> H.toMarkup $ last l
       H.ul $ mapM_ (renderTreeLi version) children
 
-appInit :: String -> OAuth2.OAuth2 -> (GithubUser -> Bool) -> SnapletInit StrongholdApp StrongholdApp
-appInit strongholdURL githubKeys authorised =
+appInit :: AppConfig -> SnapletInit StrongholdApp StrongholdApp
+appInit (AppConfig strongholdURL githubKeys authorised _) =
   makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
     session <- nestSnaplet "" sess $
       initCookieSessionManager "config/session_secret" "sess" Nothing
@@ -386,26 +395,30 @@ convertList :: Configured a => Value -> Maybe [a]
 convertList (List x) = sequence (map convert x)
 convertList _ = Nothing
 
-fetchConfig :: IO (String, OAuth2.OAuth2, GithubUser -> Bool)
-fetchConfig = do
-  config <- load [Required "config/stronghold.cfg"]
+fetchConfig :: String -> IO AppConfig
+fetchConfig filename = do
+  config <- load [Required filename]
   strongholdURL <- require config "stronghold-url"
   clientID <- require config "github-client-id"
   clientSecret <- require config "github-client-secret"
   authorised <- convertList <$> require config "authorised-users"
   authorised' <- maybe (error "expected a list of github usernames") return authorised
-  return  
-    (strongholdURL,
-     OAuth2.OAuth2
-      clientID
-      clientSecret
-      "https://github.com/login/oauth/authorize"
-      "https://github.com/login/oauth/access_token"
-      Nothing
-      Nothing,
-     flip elem authorised' . githubLogin)
+  portNum <- require config "port"
+  return
+    (AppConfig
+      strongholdURL
+      (OAuth2.OAuth2
+        clientID
+        clientSecret
+        "https://github.com/login/oauth/authorize"
+        "https://github.com/login/oauth/access_token"
+        Nothing
+        Nothing)
+      (flip elem authorised' . githubLogin)
+      portNum)
 
 main :: IO ()
 main = do
-  (strongholdURL, githubKeys, authorised) <- fetchConfig
-  serveSnaplet defaultConfig (appInit strongholdURL githubKeys authorised)
+  [configFile] <- getArgs
+  config <- fetchConfig configFile
+  serveSnaplet (setPort (portNum config) defaultConfig) (appInit config)
