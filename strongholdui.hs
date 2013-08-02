@@ -57,7 +57,8 @@ data AppConfig = AppConfig {
   githubKeys :: OAuth2.OAuth2,
   authorised :: GithubUser -> Bool,
   portNum :: Int,
-  sessionSecretPath :: FilePath
+  sessionSecretPath :: FilePath,
+  assetsPath :: FilePath
 }
 
 navbar :: H.Html
@@ -246,7 +247,7 @@ renderTree version tree =
       H.ul $ mapM_ (renderTreeLi version) children
 
 appInit :: AppConfig -> SnapletInit StrongholdApp StrongholdApp
-appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath) =
+appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath assetsPath) =
   makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
     session <- nestSnaplet "" sess $
       initCookieSessionManager sessionSecretPath "sess" Nothing
@@ -259,7 +260,7 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath) =
       ("/:version/info", info),
       ("/:version/node", node),
       ("/:version/update", updateNode),
-      ("/assets", serveDirectory "./assets")
+      ("/assets", serveDirectory assetsPath)
      ]
     client <- liftIO $ S.newClient strongholdURL
     return $ StrongholdApp session client Nothing
@@ -409,6 +410,7 @@ fetchConfig filename = do
   authorised' <- maybe (error "expected a list of github usernames") return authorised
   portNum <- require config "port"
   sessionSecretPath <- require config "session-secret-path"
+  assetsPath <- require config "assets-path"
   return
     (AppConfig
       strongholdURL
@@ -421,7 +423,8 @@ fetchConfig filename = do
         Nothing)
       (flip elem authorised' . githubLogin)
       portNum
-      sessionSecretPath)
+      sessionSecretPath
+      assetsPath)
 
 writeTo :: Handle -> ConfigLog
 writeTo handle = ConfigIoLog (BC.hPutStrLn handle)
