@@ -5,6 +5,7 @@ import Data.Maybe
 import Data.Monoid
 import Data.Text (Text)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as TIO
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as BC
@@ -23,6 +24,7 @@ import Control.Applicative (empty)
 import Control.Lens (set)
 import Control.Lens.TH
 import Control.Monad (mzero)
+import Control.Exception (try, SomeException)
 
 import System.Environment (getArgs)
 
@@ -432,6 +434,17 @@ writeTo handle = ConfigIoLog (BC.hPutStrLn handle)
 applyAll :: [a -> a] -> a -> a
 applyAll = appEndo . mconcat . map Endo
 
+serveSnaplet' :: Config Snap AppConfig -> SnapletInit b b -> IO ()
+serveSnaplet' config initializer = do
+  (msgs, handler, doCleanup) <- runSnaplet Nothing initializer
+
+  (conf, site) <- combineConfig config handler
+  let serve = simpleHttpServe conf
+
+  liftIO $ TIO.hPutStrLn stdout msgs
+  _ <- try $ serve $ site :: IO (Either SomeException ())
+  doCleanup
+
 main :: IO ()
 main = do
   [configFile] <- getArgs
@@ -442,4 +455,4 @@ main = do
           setAccessLog (writeTo stdout),
           setErrorLog (writeTo stderr)
         ] defaultConfig
-  serveSnaplet snapConfig (appInit config)
+  serveSnaplet' snapConfig (appInit config)
