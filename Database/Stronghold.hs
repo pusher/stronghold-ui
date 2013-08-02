@@ -244,18 +244,17 @@ fetchVersionInfo client (Version version) = do
   maybe (fail "incorrect json structure") return (structureChange result)
  where
   structureChange :: JSON -> Maybe (Maybe (MetaInfo, [Change]))
-  structureChange dat =
-    case resultToM $ fromJSON dat of
-      Nothing -> Nothing
-      Just Nothing -> Just Nothing
-      Just (Just x) ->
-        Just $
-          (,) <$>
-            (MetaInfo <$>
-              (utcFromInteger <$> ("timestamp" .> x)) <*>
-              ("comment" .> x) <*>
-              ("author" .> x)) <*>
-            ("changes" .> x)
+  structureChange x =
+    case ("previous" .> x :: Maybe String) of
+      Nothing -> return Nothing
+      _ -> do
+        value <- (,) <$>
+                    (MetaInfo <$>
+                      (utcFromInteger <$> ("timestamp" .> x)) <*>
+                      ("comment" .> x) <*>
+                      ("author" .> x)) <*>
+                    ("changes" .> x)
+        return (Just value)
 
 updatePath :: Client -> Version -> Path -> JSON -> Text -> Text -> IO (Either Text Version)
 updatePath client (Version version) path json author comment = do
