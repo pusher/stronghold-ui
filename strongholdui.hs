@@ -7,6 +7,7 @@ import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as BC
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.Aeson as Aeson
 import Data.Aeson ((.:))
@@ -41,6 +42,8 @@ import qualified Network.OAuth.OAuth2 as OAuth2
 import Network.OAuth.OAuth2.HttpClient (doJSONPostRequest)
 
 import Github
+
+import System.IO (Handle, stdout, stderr)
 
 data StrongholdApp = StrongholdApp {
   _sess :: Snaplet SessionManager,
@@ -420,8 +423,20 @@ fetchConfig filename = do
       portNum
       sessionSecretPath)
 
+writeTo :: Handle -> ConfigLog
+writeTo handle = ConfigIoLog (BC.hPutStrLn handle)
+
+applyAll :: [a -> a] -> a -> a
+applyAll = appEndo . mconcat . map Endo
+
 main :: IO ()
 main = do
   [configFile] <- getArgs
   config <- fetchConfig configFile
-  serveSnaplet (setPort (portNum config) defaultConfig) (appInit config)
+  let snapConfig =
+        applyAll [
+          setPort (portNum config),
+          setAccessLog (writeTo stdout),
+          setErrorLog (writeTo stderr)
+        ] defaultConfig
+  serveSnaplet snapConfig (appInit config)
