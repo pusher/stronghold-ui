@@ -381,15 +381,15 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
           Just (OAuth2.AccessToken token' _) -> do
             user <- liftIO $ userInfo (githubKeys {OAuth2.oauthAccessToken = Just token'})
             case user of
-              Nothing -> writeText "not authorised"
-              Just user'@(GithubUser _ name _ _) ->
+              Nothing -> writeText "no user"
+              Just user' ->
                 if authorised user' then do
                   with sess $ do
-                    setInSession "author" name
+                    setInSession "author" (githubLogin user')
                     commitSession
                   redirect "/"
                 else
-                  writeText "not authorised"
+                  writeText (Text.concat ["not authorised ", githubLogin user'])
 
   logout :: Handler StrongholdApp StrongholdApp ()
   logout = Snap.method GET $ ifTop $ do

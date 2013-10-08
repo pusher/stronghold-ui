@@ -13,16 +13,16 @@ import Network.OAuth.OAuth2.HttpClient (doJSONGetRequest)
 
 data GithubUser = GithubUser {
   githubID :: Integer,
-  githubName :: Text,
   githubEmail :: Text,
   githubLogin :: Text
 } deriving Show
 
 instance Aeson.FromJSON GithubUser where
   parseJSON (Aeson.Object o) =
-    GithubUser <$> o .: "id" <*> o .: "name" <*> o .: "email" <*> o .: "login"
+    GithubUser <$> o .: "id" <*> o .: "email" <*> o .: "login"
   parseJSON _ = mzero
 
+-- TODO: Replace Maybe with Either String
 userInfo :: OAuth2.OAuth2 -> IO (Maybe GithubUser)
 userInfo oauth =
   doJSONGetRequest (OAuth2.appendAccessToken "https://api.github.com/user" oauth)
