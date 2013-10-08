@@ -13,13 +13,12 @@ import Network.OAuth.OAuth2.HttpClient (doJSONGetRequest)
 
 data GithubUser = GithubUser {
   githubID :: Integer,
-  githubEmail :: Text,
   githubLogin :: Text
 } deriving Show
 
 instance Aeson.FromJSON GithubUser where
   parseJSON (Aeson.Object o) =
-    GithubUser <$> o .: "id" <*> o .: "email" <*> o .: "login"
+    GithubUser <$> o .: "id" <*> o .: "login"
   parseJSON _ = mzero
 
 -- TODO: Replace Maybe with Either String
