@@ -69,7 +69,7 @@ navbar =
     H.div ! A.class_ "navbar-inner" $
       H.div ! A.class_ "container" $ do
         H.button !
-          A.type_ "H.button" !
+          A.type_ "button" !
           A.class_ "btn btn-navbar" !
           H.dataAttribute "toggle" "collapse" !
           H.dataAttribute "target" ".nav-collapse" $ do
@@ -105,7 +105,7 @@ nodeTemplate version path peculiar materialized =
       H.div ! A.class_ "span8" $ do
         H.div ! A.class_ "page-header" $ H.h4 $ H.toMarkup $ S.pathToText path
         H.p $
-          H.div ! A.id "mode" ! A.class_ "btn-group" ! H.dataAttribute "toggle" "H.buttons-radio" $ do
+          H.div ! A.id "mode" ! A.class_ "btn-group" ! H.dataAttribute "toggle" "buttons-radio" $ do
             H.button ! A.class_ "btn btn-primary active" ! A.value "0" $ "Peculiar"
             H.button ! A.class_ "btn btn-primary" ! A.value "1" $ "Materialized"
         H.div
