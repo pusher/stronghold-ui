@@ -375,11 +375,11 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
       Nothing -> empty
       Just code' -> do
         let (url, body) = OAuth2.accessTokenUrl githubKeys code'
-        token <- liftIO $ doJSONPostRequest (url, body)
+        token <- liftIO $ doJSONPostRequest url body
         case token of
-          Nothing -> writeText "invalid token"
-          Just (OAuth2.AccessToken token' _) -> do
-            user <- liftIO $ userInfo (githubKeys {OAuth2.oauthAccessToken = Just token'})
+          Left _ -> writeText "invalid token"
+          Right token' -> do
+            user <- liftIO $ userInfo token'
             case user of
               Nothing -> writeText "no user"
               Just user' ->
@@ -421,7 +421,6 @@ fetchConfig filename = do
         clientSecret
         "https://github.com/login/oauth/authorize"
         "https://github.com/login/oauth/access_token"
-        Nothing
         Nothing)
       (flip elem authorised' . githubLogin)
       portNum
