@@ -27,6 +27,7 @@ import Control.Monad (mzero)
 import Control.Exception (try, SomeException)
 
 import System.Environment (getArgs)
+import System.Exit
 
 import Snap.Snaplet.Session
 import Snap.Snaplet.Session.Backends.CookieSession
@@ -433,7 +434,7 @@ writeTo handle = ConfigIoLog (BC.hPutStrLn handle)
 applyAll :: [a -> a] -> a -> a
 applyAll = appEndo . mconcat . map Endo
 
-serveSnaplet' :: Config Snap AppConfig -> SnapletInit b b -> IO ()
+serveSnaplet' :: Config Snap AppConfig -> SnapletInit b b -> IO ExitCode
 serveSnaplet' config initializer = do
   (msgs, handler, doCleanup) <- runSnaplet Nothing initializer
 
@@ -441,8 +442,12 @@ serveSnaplet' config initializer = do
   let serve = simpleHttpServe conf
 
   liftIO $ TIO.hPutStrLn stdout msgs
-  _ <- try $ serve $ site :: IO (Either SomeException ())
+  v <- try $ serve $ site :: IO (Either SomeException ())
+  exitCode <- case v of
+    Left exception -> (print exception) >> (return $ ExitFailure 1)
+    Right () -> return ExitSuccess
   doCleanup
+  return exitCode
 
 main :: IO ()
 main = do
@@ -454,4 +459,4 @@ main = do
           setAccessLog (writeTo stdout),
           setErrorLog (writeTo stderr)
         ] defaultConfig
-  serveSnaplet' snapConfig (appInit config)
+  serveSnaplet' snapConfig (appInit config) >>= exitWith
