@@ -1,0 +1,8 @@
+
+pre.json_diff ins {
+  color: green;
+}
+
+pre.json_diff del {
+  color: red;
+}

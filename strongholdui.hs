@@ -89,7 +89,9 @@ import Types
       sess,
       storedHead )
 import Views
-    ( nodeTemplate, versionTemplate, constructTree, renderTree )
+    ( nodeTemplate, versionTemplate, diffTemplate, constructTree, renderTree )
+import JsonDiff
+    ( diffJson )
 
 
 appInit :: AppConfig -> SnapletInit StrongholdApp StrongholdApp
@@ -106,6 +108,7 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
       ("/:version/info", info),
       ("/:version/node", node),
       ("/:version/update", updateNode),
+      ("/:version/prevdiff", prevDiff),
       ("/assets", serveDirectory assetsPath)
      ]
     client <- liftIO $ S.newClient strongholdURL
@@ -196,6 +199,15 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
         case result of
           Right result' -> redirect (B.concat ["/", (encodeUtf8 . S.versionToText) result', "/info"])
           Left err -> writeText $ Text.concat ["failed: ", err]
+
+  prevDiff :: Handler StrongholdApp StrongholdApp ()
+  prevDiff = Snap.method GET $ forceLogin $ do
+    Just version <- getParam "version"
+    client <- gets _stronghold
+    let version' = S.bsToVersion version
+    Just (_, [S.Change _ old new]) <- liftIO $ S.fetchVersionInfo client version'
+    writeLazyText $ renderHtml $ diffTemplate $ diffJson old new
+
 
   loggedIn :: Handler StrongholdApp StrongholdApp Bool
   loggedIn =

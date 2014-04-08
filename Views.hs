@@ -2,76 +2,26 @@
 
 module Views where
 
+import Data.List ( foldl', intersperse )
 import Data.Maybe ( catMaybes )
 import Data.Monoid ( Monoid(mappend, mempty) )
 import Data.Text ( Text )
-import qualified Data.Text as Text ( pack, concat )
-import qualified Data.Text.IO as TIO ()
 import Data.Text.Encoding ( decodeUtf8 )
-import qualified Data.ByteString as B ( concat )
-import qualified Data.ByteString.Char8 as BC ()
-import qualified Data.ByteString.Lazy as BL ( toChunks )
-import qualified Data.Aeson as Aeson ( Value, encode )
-import Data.Tree ( Tree(Node) )
-import qualified Data.HashMap.Strict as HashMap
-    ( insert, empty, toList, unionWith )
-import Data.List ( foldl', intersperse )
 import Data.Time.Clock ( UTCTime, diffUTCTime )
+import Data.Tree ( Tree(Node) )
+import qualified Data.Aeson as Aeson
+import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Text as Text
+import qualified Database.Stronghold as S
+import qualified Text.Blaze.Html5 as H
+import qualified Text.Blaze.Html5.Attributes as A
 import Snap ( when, forM_ )
 import Text.Blaze.Html5 ( (!) )
-import qualified Text.Blaze.Html5 as H
-    ( Html,
-      ToValue(toValue),
-      ToMarkup(toMarkup),
-      dataAttribute,
-      ul,
-      title,
-      time,
-      textarea,
-      style,
-      span,
-      script,
-      p,
-      link,
-      li,
-      input,
-      head,
-      h5,
-      h4,
-      h3,
-      form,
-      fieldset,
-      docTypeHtml,
-      div,
-      button,
-      br,
-      body,
-      a )
-import qualified Text.Blaze.Html5.Attributes as A
-    ( value,
-      type_,
-      title,
-      style,
-      src,
-      rel,
-      placeholder,
-      name,
-      method,
-      id,
-      href,
-      datetime,
-      class_,
-      action )
-import qualified Database.Stronghold as S
-    ( MetaInfo(..),
-      Version,
-      Path,
-      pathToText,
-      pathToList,
-      viewl,
-      singletonPath,
-      versionToText )
 import Types ( UpdateInfo, VersionsInfo )
+
+import JsonDiff
 
 
 navbar :: H.Html
@@ -138,6 +88,9 @@ nodeTemplate version path peculiar materialized =
  where
   jsonToAttr = H.toValue . decodeUtf8 . B.concat . BL.toChunks . Aeson.encode
 
+diffTemplate :: JsonDiff -> H.Html
+diffTemplate = jsonDiffToHtml
+
 humanizeTime :: UTCTime -> UTCTime -> Text
 humanizeTime now ts =
   let diff = now `diffUTCTime` ts
@@ -186,22 +139,24 @@ versionTemplate now version tree upto after =
   rootTemplate
     (do
       H.script ! A.src "/assets/js/version.js" $ return ()
-      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/hierarchy.css")
+      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/hierarchy.css"
+      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/json_diff.css")
     (H.div ! A.class_ "row" $ do
       H.div ! A.class_ "span6" $ do
         H.h3 "Updates"
         when (not (null after)) $ do
-          forM_ (reverse after) renderShortVersion
+          forM_ (reverse after) (renderShortVersion [])
           H.div ! A.id "newer-wrapper" $
             H.div ! A.id "newer" $ "newer ⇀"
         case upto of
-          Just (before, (current, _)) -> do
-            renderShortVersion current ! A.id "current-change"
+          Just (before, (current, changes)) -> do
+            (renderShortVersion changes) current ! A.id "current-change"
             when (not (null before)) $ do
               H.div ! A.id "older-wrapper-wrapper" $
                 H.div ! A.id "older-wrapper" $
                   H.div ! A.id "older" $ "↼ older"
-              forM_ before renderShortVersion
+              forM_ before (renderShortVersion [])
+
           Nothing -> return ()
       H.div ! A.class_ "span6" $ do
         H.div $ do
@@ -209,7 +164,7 @@ versionTemplate now version tree upto after =
           H.div ! A.class_ "tree" $ tree
           H.form ! A.id "navigate-hierarchy" ! A.class_ "form-inline" $ do
             H.input ! A.type_ "text" ! A.placeholder "Enter Path" ! A.name "path"
-            H.button ! A.type_ "submit" ! A.class_ "btn" $ "Go")
+            H.button ! A.type_ "submit" ! A.class_ "btn" $ "Go") 
  where
   renderPaths :: [S.Path] -> Text
   renderPaths [] = ""
@@ -221,13 +176,14 @@ versionTemplate now version tree upto after =
         o = reverse (tail r) in
           Text.concat $ intersperse ", " o ++ [" and ", l]
 
-  renderShortVersion :: (S.Version, S.MetaInfo, [S.Path]) -> H.Html
-  renderShortVersion (version, S.MetaInfo ts comment author, paths) =
+  renderShortVersion :: [S.Change] -> (S.Version, S.MetaInfo, [S.Path]) -> H.Html
+  renderShortVersion changes (version, S.MetaInfo ts comment author, paths) =
     H.div ! A.class_ "short-change" $ do
       makeTimeHTML now ts
       H.a ! (A.href $ H.toValue $ Text.concat ["/", S.versionToText version, "/info"]) $
         H.h5 $ H.toMarkup $ Text.concat [author, " updated ", renderPaths paths]
       H.toMarkup comment
+      mapM_ changeToHtml changes
 
 constructTree :: S.Path -> [S.Path] -> Tree S.Path
 constructTree root =
@@ -255,3 +211,48 @@ renderTree version tree =
           [] -> "root"
           l -> H.toMarkup $ last l
       H.ul $ mapM_ (renderTreeLi version) children
+
+
+changeToHtml :: S.Change -> H.Html
+changeToHtml (S.Change _ before after) =
+  jsonDiffToHtml $ diffJson before after
+
+jsonDiffToHtml :: JsonDiff -> H.Html
+jsonDiffToHtml =
+  (H.pre ! A.class_ "json_diff") . diffToHtml
+
+  where
+    diffToHtml :: JsonDiff -> H.Html
+    diffToHtml Same = "-"
+    diffToHtml (HashChange keyDiffs) = do
+      "{"
+      renderCommas elems
+      "}"
+     where
+      elems = map (uncurry kvToHtml) keyDiffs 
+      kvToHtml :: Text -> JsonDiff -> H.Html
+      kvToHtml key diff = do
+        H.toMarkup key
+        ": "
+        diffToHtml diff
+
+    diffToHtml (ArrayChange posDiffs) = do
+      "["
+      renderCommas elems
+      "]"
+     where
+      elems = map (diffToHtml . snd) posDiffs
+    diffToHtml (Replace old new) = do
+      diffToHtml (Removed old)
+      diffToHtml (Added new)
+    diffToHtml (Added value) =
+      H.ins $ jsonToHtml value
+    diffToHtml (Removed value) =
+      H.del $ jsonToHtml value
+
+    jsonToHtml :: Aeson.Value -> H.Html
+    jsonToHtml = H.unsafeLazyByteString . Aeson.encode
+
+    renderCommas :: [H.Html] -> H.Html
+    renderCommas = foldr (>>) (return ()) . intersperse ", "
+
