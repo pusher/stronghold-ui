@@ -4,6 +4,7 @@ build-type:          Simple
 cabal-version:       >=1.8
 
 executable stronghold-ui
+--  ghc-options:        -ddump-minimal-imports
   main-is:             strongholdui.hs
   build-depends:       HTTP == 4000.2.10
                      , HUnit == 1.2.5.2

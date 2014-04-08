@@ -29,25 +29,42 @@ module Database.Stronghold (
   updatePath
 ) where
 
-import Data.List (intercalate)
-import Data.Maybe (fromJust)
-import Data.Monoid
-import Data.Text (Text)
+import Data.List ( intercalate )
+import Data.Maybe ( fromJust )
+import Data.Monoid ( Monoid(mappend, mempty) )
+import Data.Text ( Text )
 import qualified Data.Text as Text
-import Data.Aeson (fromJSON, toJSON, (.:))
+    ( unpack, stripPrefix, splitOn, pack, null, last, concat )
+import Data.Aeson ( fromJSON, toJSON, (.:) )
 import qualified Data.Aeson as Aeson
+    ( Value(Object),
+      Result(Success),
+      FromJSON(..),
+      object,
+      fromJSON,
+      encode,
+      decode )
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as BL
-import Data.Text.Encoding (decodeUtf8, encodeUtf8)
-import qualified Data.HashMap.Strict as HashMap
-import Data.Time.Clock (UTCTime)
-import Data.Time.Clock.POSIX (posixSecondsToUTCTime)
-
-import Control.Applicative ((<$>), (<*>))
-import Control.Monad (forM, mzero)
-
+    ( ByteString, concat, length )
+import qualified Data.ByteString.Lazy as BL ( toChunks )
+import Data.Text.Encoding ( decodeUtf8, encodeUtf8 )
+import qualified Data.HashMap.Strict as HashMap ( lookup )
+import Data.Time.Clock ( UTCTime )
+import Data.Time.Clock.POSIX ( posixSecondsToUTCTime )
+import Control.Applicative ( (<$>), (<*>) )
+import Control.Monad ( MonadPlus(mzero) )
 import qualified Network.HTTP as HTTP
-import Network.URI (URI, relativeTo, parseRelativeReference, parseURI)
+    ( HStream,
+      HeaderName(HdrContentLength, HdrContentType),
+      RequestMethod(GET, POST),
+      Request(rqBody),
+      replaceHeader,
+      mkRequest,
+      simpleHTTP,
+      getResponseCode,
+      getResponseBody )
+import Network.URI
+    ( URI, relativeTo, parseRelativeReference, parseURI )
 
 type JSON = Aeson.Value
 
