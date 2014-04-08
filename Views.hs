@@ -12,27 +12,12 @@ import qualified Data.ByteString as B ( concat )
 import qualified Data.ByteString.Char8 as BC ()
 import qualified Data.ByteString.Lazy as BL ( toChunks )
 import qualified Data.Aeson as Aeson ( Value, encode )
-import Data.Aeson ()
 import Data.Tree ( Tree(Node) )
-import Data.HashMap.Strict ()
 import qualified Data.HashMap.Strict as HashMap
     ( insert, empty, toList, unionWith )
 import Data.List ( foldl', intersperse )
 import Data.Time.Clock ( UTCTime, diffUTCTime )
-import Data.Configurator ()
-import Data.Configurator.Types ()
-import Control.Applicative ()
-import Control.Lens ()
-import Control.Lens.TH ()
-import Control.Monad ()
-import Control.Exception ()
-import System.Environment ()
-import System.Exit ()
-import Snap.Snaplet.Session ()
-import Snap.Snaplet.Session.Backends.CookieSession ()
 import Snap ( when, forM_ )
-import Snap.Util.FileServe ()
-import Text.Blaze.Html.Renderer.Text ()
 import Text.Blaze.Html5 ( (!) )
 import qualified Text.Blaze.Html5 as H
     ( Html,
@@ -86,10 +71,6 @@ import qualified Database.Stronghold as S
       viewl,
       singletonPath,
       versionToText )
-import qualified Network.OAuth.OAuth2 as OAuth2 ()
-import Network.OAuth.OAuth2.HttpClient ()
-import Github ()
-import System.IO ()
 import Types ( UpdateInfo, VersionsInfo )
 
 

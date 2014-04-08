@@ -11,18 +11,10 @@ import qualified Data.ByteString as B ( concat )
 import qualified Data.ByteString.Char8 as BC ( hPutStrLn )
 import qualified Data.ByteString.Lazy as BL ( fromChunks )
 import qualified Data.Aeson as Aeson ( object, decode )
-import Data.Aeson ()
-import Data.Tree ()
-import Data.HashMap.Strict ()
-import qualified Data.HashMap.Strict as HashMap ()
-import Data.List ()
 import Data.Time.Clock ( getCurrentTime )
 import Data.Configurator ( load, require, Worth(Required) )
 import Data.Configurator.Types ( Configured, convert, Value(List) )
-import Control.Applicative ()
 import Control.Lens ( set )
-import Control.Lens.TH ()
-import Control.Monad ()
 import Control.Exception ( try, SomeException )
 import System.Environment ( getArgs )
 import System.Exit ( ExitCode(..), exitWith )
@@ -66,9 +58,8 @@ import Snap
       gets )
 import Snap.Util.FileServe ( serveDirectory )
 import Text.Blaze.Html.Renderer.Text ( renderHtml )
-import Text.Blaze.Html5 ()
-import qualified Text.Blaze.Html5 as H ()
-import qualified Text.Blaze.Html5.Attributes as A ()
+import qualified Text.Blaze.Html5 as H
+import qualified Text.Blaze.Html5.Attributes as A
 import qualified Database.Stronghold as S
     ( Change(Change),
       Version,
