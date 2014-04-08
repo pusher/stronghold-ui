@@ -11,18 +11,10 @@ import qualified Data.ByteString as B ( concat )
 import qualified Data.ByteString.Char8 as BC ( hPutStrLn )
 import qualified Data.ByteString.Lazy as BL ( fromChunks )
 import qualified Data.Aeson as Aeson ( object, decode )
-import Data.Aeson ()
-import Data.Tree ()
-import Data.HashMap.Strict ()
-import qualified Data.HashMap.Strict as HashMap ()
-import Data.List ()
 import Data.Time.Clock ( getCurrentTime )
 import Data.Configurator ( load, require, Worth(Required) )
 import Data.Configurator.Types ( Configured, convert, Value(List) )
-import Control.Applicative ()
 import Control.Lens ( set )
-import Control.Lens.TH ()
-import Control.Monad ()
 import Control.Exception ( try, SomeException )
 import System.Environment ( getArgs )
 import System.Exit ( ExitCode(..), exitWith )
@@ -66,9 +58,8 @@ import Snap
       gets )
 import Snap.Util.FileServe ( serveDirectory )
 import Text.Blaze.Html.Renderer.Text ( renderHtml )
-import Text.Blaze.Html5 ()
-import qualified Text.Blaze.Html5 as H ()
-import qualified Text.Blaze.Html5.Attributes as A ()
+import qualified Text.Blaze.Html5 as H
+import qualified Text.Blaze.Html5.Attributes as A
 import qualified Database.Stronghold as S
     ( Change(Change),
       Version,
@@ -98,7 +89,9 @@ import Types
       sess,
       storedHead )
 import Views
-    ( nodeTemplate, versionTemplate, constructTree, renderTree )
+    ( nodeTemplate, versionTemplate, diffTemplate, constructTree, renderTree )
+import JsonDiff
+    ( diffJson )
 
 
 appInit :: AppConfig -> SnapletInit StrongholdApp StrongholdApp
@@ -115,6 +108,7 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
       ("/:version/info", info),
       ("/:version/node", node),
       ("/:version/update", updateNode),
+      ("/:version/prevdiff", prevDiff),
       ("/assets", serveDirectory assetsPath)
      ]
     client <- liftIO $ S.newClient strongholdURL
@@ -205,6 +199,15 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
         case result of
           Right result' -> redirect (B.concat ["/", (encodeUtf8 . S.versionToText) result', "/info"])
           Left err -> writeText $ Text.concat ["failed: ", err]
+
+  prevDiff :: Handler StrongholdApp StrongholdApp ()
+  prevDiff = Snap.method GET $ forceLogin $ do
+    Just version <- getParam "version"
+    client <- gets _stronghold
+    let version' = S.bsToVersion version
+    Just (_, [S.Change _ old new]) <- liftIO $ S.fetchVersionInfo client version'
+    writeLazyText $ renderHtml $ diffTemplate $ diffJson old new
+
 
   loggedIn :: Handler StrongholdApp StrongholdApp Bool
   loggedIn =
