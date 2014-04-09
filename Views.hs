@@ -180,7 +180,7 @@ versionTemplate now version tree upto after =
   renderShortVersion changes (version, S.MetaInfo ts comment author, paths) =
     H.div ! A.class_ "short-change" $ do
       makeTimeHTML now ts
-      H.a ! (A.href $ H.toValue $ Text.concat ["/", S.versionToText version, "/info"]) $
+      H.a ! (A.href $ H.toValue $ Text.concat ["/", S.versionToText version, "/info#current-change"]) $
         H.h5 $ H.toMarkup $ Text.concat [author, " updated ", renderPaths paths]
       H.toMarkup comment
       mapM_ changeToHtml changes
