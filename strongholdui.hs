@@ -4,10 +4,10 @@ module Main where
 import Data.Maybe ( isJust )
 import Data.Monoid ( Monoid(mconcat, mempty), Endo(Endo, appEndo) )
 import Data.Text ( Text )
-import qualified Data.Text as Text ( splitOn, null, last, concat )
+import qualified Data.Text as Text ( splitOn, null, last, concat, pack )
 import qualified Data.Text.IO as TIO ( hPutStrLn )
 import Data.Text.Encoding ( encodeUtf8, decodeUtf8 )
-import qualified Data.ByteString as B ( concat )
+import qualified Data.ByteString as B ( concat, ByteString(..) )
 import qualified Data.ByteString.Char8 as BC ( hPutStrLn )
 import qualified Data.ByteString.Lazy as BL ( fromChunks )
 import qualified Data.Aeson as Aeson ( object, decode )
@@ -78,6 +78,7 @@ import qualified Database.Stronghold as S
       paths,
       fetchVersionInfo,
       updatePath )
+import           Network.HTTP.Conduit
 import qualified Network.OAuth.OAuth2 as OAuth2
     ( OAuth2(OAuth2), authorizationUrl, accessTokenUrl )
 import Network.OAuth.OAuth2.HttpClient ( doJSONPostRequest )
@@ -94,8 +95,8 @@ import JsonDiff
     ( diffJson )
 
 
-appInit :: AppConfig -> SnapletInit StrongholdApp StrongholdApp
-appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath assetsPath) =
+appInit :: AppConfig -> Manager -> SnapletInit StrongholdApp StrongholdApp
+appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath assetsPath) manager = do
   makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
     session <- nestSnaplet "" sess $
       initCookieSessionManager sessionSecretPath "sess" Nothing
@@ -221,11 +222,11 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
       Nothing -> empty
       Just code' -> do
         let (url, body) = OAuth2.accessTokenUrl githubKeys code'
-        token <- liftIO $ doJSONPostRequest url body
+        token <- liftIO $ doJSONPostRequest manager githubKeys url body
         case token of
           Left _ -> writeText "invalid token"
           Right token' -> do
-            user <- liftIO $ userInfo token'
+            user <- liftIO $ userInfo manager token'
             case user of
               Nothing -> writeText "no user"
               Just user' ->
@@ -304,4 +305,5 @@ main = do
           setAccessLog (writeTo stdout),
           setErrorLog (writeTo stderr)
         ] defaultConfig
-  serveSnaplet' snapConfig (appInit config) >>= exitWith
+  manager <- newManager conduitManagerSettings
+  serveSnaplet' snapConfig (appInit config manager) >>= exitWith

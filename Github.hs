@@ -9,6 +9,7 @@ import Control.Applicative ( (<$>), (<*>) )
 import Control.Monad ( mzero )
 import qualified Network.OAuth.OAuth2 as OAuth2 ( AccessToken )
 import Network.OAuth.OAuth2.HttpClient ( authGetJSON )
+import           Network.HTTP.Conduit (Manager)
 
 data GithubUser = GithubUser {
   githubID :: Integer,
@@ -21,6 +22,6 @@ instance Aeson.FromJSON GithubUser where
   parseJSON _ = mzero
 
 -- TODO: Replace Maybe with Either String
-userInfo :: OAuth2.AccessToken -> IO (Maybe GithubUser)
-userInfo token =
-  fmap (either (const Nothing) Just) (authGetJSON token "https://api.github.com/user")
+userInfo :: Manager -> OAuth2.AccessToken -> IO (Maybe GithubUser)
+userInfo manager token =
+  fmap (either (const Nothing) Just) (authGetJSON manager token "https://api.github.com/user")
