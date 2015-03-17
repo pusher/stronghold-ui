@@ -1,0 +1,7 @@
+stronghold-url = "http://127.0.0.1:5040/"
+github-client-id = "86aaf71b228cba740d6a"
+github-client-secret = "d2ef30bb321b9124cfc7a208f1ed4dccabbca909"
+authorised-users = ["zimbatm"]
+port = 8000
+session-secret-path = "./config/session_secret"
+assets-path = "./assets"
