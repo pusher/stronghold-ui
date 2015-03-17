@@ -32,7 +32,11 @@
     var peculiar_editor =
       new JSONEditor(
         peculiar_container[0],
-        {},
+        {
+          'mode': 'code',
+          'modes': ['code', 'tree'],
+          error: function (err) { alert(err.toString()); }
+        },
         peculiar_json
       );
     var materialized_view =
