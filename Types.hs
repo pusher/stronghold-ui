@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Types where
 
+import Data.Text ( Text )
 import Control.Lens.TH ( makeLenses )
 import Snap.Snaplet.Session ( SessionManager )
 import Snap ( Snaplet )
@@ -20,11 +21,11 @@ makeLenses ''StrongholdApp -- This is a little bit magic.
 data AppConfig = AppConfig {
   strongholdURL :: String,
   githubKeys :: OAuth2.OAuth2,
-  authorised :: GithubUser -> Bool,
+  authorised :: [Text],
   portNum :: Int,
   sessionSecretPath :: FilePath,
   assetsPath :: FilePath
-}
+} deriving Show
 
 
 type VersionsInfo = [(S.Version, S.MetaInfo, [S.Path])]

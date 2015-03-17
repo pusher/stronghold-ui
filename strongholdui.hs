@@ -230,7 +230,7 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
             case user of
               Nothing -> writeText "no user"
               Just user' ->
-                if authorised user' then do
+                if isAuthorized authorised user' then do
                   with sess $ do
                     setInSession "author" (githubLogin user')
                     commitSession
@@ -269,10 +269,13 @@ fetchConfig filename = do
         "https://github.com/login/oauth/authorize"
         "https://github.com/login/oauth/access_token"
         Nothing)
-      (flip elem authorised' . githubLogin)
+      authorised'
       portNum
       sessionSecretPath
       assetsPath)
+
+isAuthorized :: [Text] -> GithubUser -> Bool
+isAuthorized authorised user = elem (githubLogin user) authorised
 
 writeTo :: Handle -> ConfigLog
 writeTo handle = ConfigIoLog (BC.hPutStrLn handle)
