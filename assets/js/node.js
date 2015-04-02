@@ -30,15 +30,19 @@
     var materialized_json = materialized_container.data('json');
 
     var peculiar_editor =
-      new jsoneditor.JSONEditor(
+      new JSONEditor(
         peculiar_container[0],
-        {},
+        {
+          'mode': 'code',
+          'modes': ['code', 'tree'],
+          error: function (err) { alert(err.toString()); }
+        },
         peculiar_json
       );
     var materialized_view =
-      new jsoneditor.JSONEditor(
+      new JSONEditor(
         materialized_container[0],
-        {'mode': 'viewer', 'history':false}
+        {'mode': 'view', 'history': false}
       );
 
     $('#mode>button').each(function(_, element) {

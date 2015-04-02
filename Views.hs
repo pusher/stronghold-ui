@@ -59,9 +59,10 @@ nodeTemplate :: S.Version -> S.Path -> Aeson.Value -> Aeson.Value -> H.Html
 nodeTemplate version path peculiar materialized =
   rootTemplate
     (do
-      H.script ! A.src "/assets/jsoneditor/jsoneditor-min.js" $ return ()
+      H.script ! A.src "/assets/jsoneditor/jsoneditor.min.js" $ return ()
       H.script ! A.src "/assets/js/node.js" $ return ()
-      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/jsoneditor/jsoneditor-min.css")
+      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/jsoneditor/jsoneditor.min.css"
+      H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/node.css")
     (H.div ! A.class_ "row" $
       H.div ! A.class_ "span8" $ do
         H.div ! A.class_ "page-header" $ H.h4 $ H.toMarkup $ S.pathToText path
