@@ -49,6 +49,7 @@ rootTemplate headContent mainContent = H.docTypeHtml $ do
     H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/bootstrap.min.css"
     H.script ! A.src "/assets/js/jquery.min.js" $ return ()
     H.script ! A.src "/assets/js/bootstrap.min.js" $ return ()
+    H.script ! A.src "/assets/js/stable-stringify.js" $ return ()
     H.style "body { padding-top: 60px; }" -- Don't let the main content overlap the top bar
     headContent
   H.body $ do
