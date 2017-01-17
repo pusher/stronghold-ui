@@ -2,7 +2,8 @@
 
 module Views where
 
-import Data.List ( foldl', intersperse )
+import Data.List ( foldl', intersperse, sortBy )
+import Data.Ord ( comparing )
 import Data.Maybe ( catMaybes )
 import Data.Monoid ( Monoid(mappend, mempty) )
 import Data.Text ( Text )
@@ -195,6 +196,7 @@ constructTree root =
 
   groupByFirstLabel :: [S.Path] -> [(Text, [S.Path])]
   groupByFirstLabel =
+    sortBy (comparing fst) .
     HashMap.toList .
     foldl' (HashMap.unionWith (++)) HashMap.empty .
     catMaybes .
