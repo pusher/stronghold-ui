@@ -2,7 +2,8 @@
 
 module Views where
 
-import Data.List ( foldl', intersperse )
+import Data.List ( foldl', intersperse, sortBy )
+import Data.Ord ( comparing )
 import Data.Maybe ( catMaybes )
 import Data.Monoid ( Monoid(mappend, mempty) )
 import Data.Text ( Text )
@@ -65,7 +66,7 @@ nodeTemplate version path peculiar materialized =
       H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/jsoneditor/jsoneditor.min.css"
       H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/node.css")
     (H.div ! A.class_ "row" $
-      H.div ! A.class_ "span8" $ do
+      H.div ! A.class_ "span12" $ do
         H.div ! A.class_ "page-header" $ H.h4 $ H.toMarkup $ S.pathToText path
         H.p $
           H.div ! A.id "mode" ! A.class_ "btn-group" ! H.dataAttribute "toggle" "buttons-radio" $ do
@@ -195,6 +196,7 @@ constructTree root =
 
   groupByFirstLabel :: [S.Path] -> [(Text, [S.Path])]
   groupByFirstLabel =
+    sortBy (comparing fst) .
     HashMap.toList .
     foldl' (HashMap.unionWith (++)) HashMap.empty .
     catMaybes .
