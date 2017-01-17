@@ -1,0 +1,7 @@
+#!/bin/sh -ex
+cd "$(dirname "$0")/.."
+
+# Build megabus dependencies
+stack setup
+stack build --only-snapshot
+
