@@ -65,7 +65,7 @@ nodeTemplate version path peculiar materialized =
       H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/jsoneditor/jsoneditor.min.css"
       H.link ! A.rel "stylesheet" ! A.type_ "text/css" ! A.href "/assets/css/node.css")
     (H.div ! A.class_ "row" $
-      H.div ! A.class_ "span8" $ do
+      H.div ! A.class_ "span12" $ do
         H.div ! A.class_ "page-header" $ H.h4 $ H.toMarkup $ S.pathToText path
         H.p $
           H.div ! A.id "mode" ! A.class_ "btn-group" ! H.dataAttribute "toggle" "buttons-radio" $ do
