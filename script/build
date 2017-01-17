@@ -13,6 +13,7 @@ BINS="$TARGET/.packager/bin"
 mkdir -p "$BINS"
 
 stack install stronghold-ui --local-bin-path "$TARGET"
+cp -r ./assets "$TARGET"
 
 pushd "$BINS"
 ln -s "../../stronghold-ui" .
