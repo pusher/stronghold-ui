@@ -1,6 +1,9 @@
 ---
 packages:
 - .
-resolver: lts-1.15
+resolver: lts-9.14
 extra-deps:
-  - base-orphans-0
+- heist-1.0.1.1
+- map-syntax-0.2.0.2
+- snap-1.0.0.2
+- xmlhtml-0.2.5.2

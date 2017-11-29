@@ -16,9 +16,9 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Text as Text
 import qualified Database.Stronghold as S
+import Control.Monad ( when, forM_ )
 import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
-import Snap ( when, forM_ )
 import Text.Blaze.Html5 ( (!) )
 import Types ( UpdateInfo, VersionsInfo )
 
