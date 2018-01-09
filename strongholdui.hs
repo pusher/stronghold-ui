@@ -14,6 +14,9 @@ import qualified Data.Aeson as Aeson ( object, decode )
 import Data.Time.Clock ( getCurrentTime )
 import Data.Configurator ( load, require, Worth(Required) )
 import Data.Configurator.Types ( Configured, convert, Value(List) )
+import Control.Applicative ( Alternative(empty) )
+import Control.Monad.IO.Class ( MonadIO(liftIO) )
+import Control.Monad.State.Class ( gets, modify )
 import Control.Lens ( set )
 import Control.Exception ( try, SomeException )
 import System.Environment ( getArgs )
@@ -23,11 +26,7 @@ import Snap.Snaplet.Session
 import Snap.Snaplet.Session.Backends.CookieSession
     ( initCookieSessionManager )
 import Snap
-    ( Applicative((<*>)),
-      Alternative(empty),
-      (<$>),
-      MonadIO(liftIO),
-      Snap,
+    ( Snap,
       Handler,
       SnapletInit,
       ConfigLog(ConfigIoLog),
@@ -53,9 +52,7 @@ import Snap
       nestSnaplet,
       makeSnaplet,
       combineConfig,
-      addRoutes,
-      modify,
-      gets )
+      addRoutes )
 import Snap.Util.FileServe ( serveDirectory )
 import Text.Blaze.Html.Renderer.Text ( renderHtml )
 import qualified Text.Blaze.Html5 as H
@@ -80,15 +77,20 @@ import qualified Database.Stronghold as S
       updatePath )
 import           Network.HTTP.Conduit
 import qualified Network.OAuth.OAuth2 as OAuth2
-    ( OAuth2(OAuth2), authorizationUrl, accessTokenUrl )
-import Network.OAuth.OAuth2.HttpClient ( doJSONPostRequest )
+    ( OAuth2(OAuth2),
+      ExchangeToken(ExchangeToken),
+      OAuth2Token(accessToken),
+      authorizationUrl )
+import Network.OAuth.OAuth2.HttpClient ( fetchAccessToken )
 import Github ( GithubUser(githubLogin), userInfo )
+import URI.ByteString ( Scheme(Scheme), Host(Host), serializeURIRef' )
 import System.IO ( Handle, stdout, stderr )
 import Types
     ( StrongholdApp(StrongholdApp, _storedHead, _stronghold),
       AppConfig(AppConfig, portNum),
       sess,
       storedHead )
+import URI ( mkURI )
 import Views
     ( nodeTemplate, versionTemplate, diffTemplate, constructTree, renderTree )
 import JsonDiff
@@ -99,7 +101,7 @@ appInit :: AppConfig -> Manager -> SnapletInit StrongholdApp StrongholdApp
 appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath assetsPath) manager = do
   makeSnaplet "stronghold" "The management UI for stronghold" Nothing $ do
     session <- nestSnaplet "" sess $
-      initCookieSessionManager sessionSecretPath "sess" Nothing
+      initCookieSessionManager sessionSecretPath "sess" Nothing Nothing
     addRoutes [
       ("/", home),
       ("/at", at),
@@ -213,7 +215,7 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
       redirect "/login"
 
   login :: Handler StrongholdApp StrongholdApp ()
-  login = Snap.method GET $ ifTop $ redirect (OAuth2.authorizationUrl githubKeys)
+  login = Snap.method GET $ ifTop $ redirect $ serializeURIRef' $ OAuth2.authorizationUrl githubKeys
 
   githubCallback :: Handler StrongholdApp StrongholdApp ()
   githubCallback = Snap.method GET $ ifTop $ do
@@ -221,12 +223,11 @@ appInit (AppConfig strongholdURL githubKeys authorised _ sessionSecretPath asset
     case code of
       Nothing -> empty
       Just code' -> do
-        let (url, body) = OAuth2.accessTokenUrl githubKeys code'
-        token <- liftIO $ doJSONPostRequest manager githubKeys url body
+        token <- liftIO $ fetchAccessToken manager githubKeys $ OAuth2.ExchangeToken $ decodeUtf8 code'
         case token of
-          Left _ -> writeText "invalid token"
+          Left s -> liftIO $ print s
           Right token' -> do
-            user <- liftIO $ userInfo manager token'
+            user <- liftIO $ userInfo manager (OAuth2.accessToken token')
             case user of
               Nothing -> writeText "no user"
               Just user' ->
@@ -260,14 +261,17 @@ fetchConfig filename = do
   portNum <- require config "port"
   sessionSecretPath <- require config "session-secret-path"
   assetsPath <- require config "assets-path"
+  let
+    authorizeURI = mkURI (Scheme "https") (Host "github.com") "/login/oauth/authorize"
+    tokenURI = mkURI (Scheme "https") (Host "github.com") "/login/oauth/access_token"
   return
     (AppConfig
       strongholdURL
       (OAuth2.OAuth2
         clientID
         clientSecret
-        "https://github.com/login/oauth/authorize"
-        "https://github.com/login/oauth/access_token"
+        authorizeURI
+        tokenURI
         Nothing)
       authorised'
       portNum
@@ -308,5 +312,5 @@ main = do
           setAccessLog (writeTo stdout),
           setErrorLog (writeTo stderr)
         ] defaultConfig
-  manager <- newManager conduitManagerSettings
+  manager <- newManager tlsManagerSettings
   serveSnaplet' snapConfig (appInit config manager) >>= exitWith

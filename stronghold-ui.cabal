@@ -16,10 +16,18 @@ executable stronghold-ui
                      , http-conduit
                      , HTTP
                      , lens
+                     , mtl
                      , network-uri
                      , snap
                      , snap-core
                      , text
                      , time
                      , unordered-containers
+                     , uri-bytestring
                      , vector
+  other-modules:       Database.Stronghold
+                     , Github
+                     , JsonDiff
+                     , Types
+                     , URI
+                     , Views
