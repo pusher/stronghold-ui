@@ -1,6 +1,7 @@
 node {
   repo = 'stronghold-ui'
   tag = env.BUILD_TAG
+  slackChannel = "#channels-team"
 
   wrap([$class: 'TimestamperBuildWrapper']) {
     try {
@@ -9,7 +10,6 @@ node {
 
       // Checkout code from repository
       checkout scm
-      sh 'git submodule update --init'
 
       // Mark the code build 'stage'....
       stage 'Build'
@@ -36,11 +36,20 @@ node {
           noUploadOnFailure: true,
         ]]
       ])
+
+      prevBuild = currentBuild.getPreviousBuild()
+      if (prevBuild != null && "SUCCESS" != prevBuild.getResult().toString()) {
+        slackSend(
+          color: 'good',
+          message: "${env.JOB_NAME} build ${env.BUILD_NUMBER} passed :tada:",
+          channel: slackChannel,
+        )
+      }
     } catch (err) {
       slackSend(
         color: 'danger',
-        message: "${env.JOB_NAME}@${env.BUILD_NUMBER} build failed !! OMG. ${err} (<${env.BUILD_URL}|Open>)",
-        channel: "#engineering-team",
+        message: "${env.JOB_NAME} build ${env.BUILD_NUMBER} failed (<${env.BUILD_URL}|see job>)",
+        channel: slackChannel,
       )
       throw err
     }
