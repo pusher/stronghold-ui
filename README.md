@@ -1,5 +1,8 @@
-# stronghold-ui
+# DEPRECATED
+`stronghold-ui` is officially deprecated and unmaintained.
+It is recommended that users transition to alternatives.
 
+# stronghold-ui
 A UI for stronghold.
 
 ## Building:
